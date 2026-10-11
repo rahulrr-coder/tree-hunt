@@ -28,8 +28,8 @@ export const POST = route(async (req: Request) => {
     await store.logAttempt({ userId: user._id, plantId: `card:${cell.id}`, verdict: "card", confidence: 0, latencyMs: Date.now() - started });
   }
   card = normalizeCard(card);
-  if (!card.languages) {
-    // Saved before local names existed: add them once. If someone else beat us to it, use theirs.
+  if (card.namesV !== 2) {
+    // Saved before local names were translated: add them once. If someone else beat us to it, use theirs.
     const upgraded = await localizeCard(card);
     card = normalizeCard((await store.updateCard(upgraded, card.rev)) ?? (await store.getCard(cell.id)) ?? upgraded);
   }

@@ -39,6 +39,7 @@ export type HuntCard = {
   lng: number;
   plants: Plant[];
   languages?: Lang[]; // local languages for this area (absent on older cards)
+  namesV?: number; // 2 = local names went through the dedicated translation pass
   /** Real sightings not shown yet; "show more" draws the next batch from here. Absent on older cards. */
   pool?: Candidate[];
   rev: number; // bumped on every change, so two simultaneous "show more" requests can't both win
@@ -240,6 +241,46 @@ async function inatLocalNames(ids: number[], langs: Lang[]): Promise<Map<number,
   return out;
 }
 
+const Translated = z.record(z.string(), z.record(z.string(), z.string().nullish()));
+
+/** One focused model call: each plant's everyday name in the local languages (keyed by plant id, then language label). */
+async function translateNames(
+  plants: { id: string | number; name: string; scientific: string }[],
+  langs: Lang[],
+): Promise<Map<string, Record<string, string>>> {
+  const out = new Map<string, Record<string, string>>();
+  if (!plants.length || !langs.length) return out;
+  const labels = langs.map((l) => l.label).join(", ");
+  try {
+    const raw = await ask(
+      `Give the everyday name of each plant below in ${labels}, written in that language's own script, as people there really say it (for example, neem is "வேம்பு" in Tamil).\n` +
+        `Use the scientific name to be sure which plant is meant. If the plant has no established name in that language, write its English common name transliterated into that script. Never leave one empty.\n` +
+        `Reply with ONLY a JSON object keyed by id: {"123":{${langs.map((l) => `"${l.label}":"..."`).join(",")}}}\n\n` +
+        plants.map((p) => `${p.id} | ${p.name} | ${p.scientific}`).join("\n"),
+      undefined,
+      35_000,
+    );
+    const body = raw.replace(/```(?:json)?/gi, "").match(/\{[\s\S]*\}/)?.[0];
+    const parsed = Translated.safeParse(body ? JSON.parse(body) : {});
+    if (!parsed.success) return out;
+    for (const [id, names] of Object.entries(parsed.data)) {
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(names)) if (v?.trim()) clean[k] = v.trim();
+      out.set(id, clean);
+    }
+  } catch (e) {
+    console.error("[hunt] translating plant names failed:", (e as Error).message);
+  }
+  return out;
+}
+
+/** Translations win over the names the model slipped into the card call. */
+const mergeNames = (a: Map<string, Record<string, string>>, b: Map<string, Record<string, string>>) => {
+  const m = new Map(a);
+  for (const [id, n] of b) m.set(id, { ...m.get(id), ...n });
+  return m;
+};
+
 /** Attach local names: iNaturalist's where it has them, the model's suggestion (marked `ai`) otherwise. */
 async function addLocalNames(
   plants: Plant[],
@@ -368,12 +409,13 @@ export async function generateCard(lat: number, lng: number): Promise<HuntCard> 
 
   // The first card is built from the 30 most-sighted plants: "the most common ones".
   const window = candidates.slice(0, TAXA_PER_CALL);
-  const names = inatLocalNames(window.map((c) => c.id), languages); // runs while the model thinks
+  const names = inatLocalNames(window.map((c) => c.id), languages); // both run while the model thinks
+  const translated = translateNames(window, languages);
   const picks = await choose(place, window, true, languages);
-  const plants = await addLocalNames(assemble(window, picks, 0), languages, suggestionsOf(picks), names);
+  const plants = await addLocalNames(assemble(window, picks, 0), languages, mergeNames(suggestionsOf(picks), await translated), names);
   const shown = new Set(plants.map((p) => p.id));
   return {
-    id: cell.id, place, lat: cell.lat, lng: cell.lng, plants, languages, rev: 0,
+    id: cell.id, place, lat: cell.lat, lng: cell.lng, plants, languages, namesV: 2, rev: 0,
     pool: candidates.filter((c) => !shown.has(String(c.id))),
     source: picks.length ? "ai" : "data", createdAt: new Date().toISOString(),
   };
@@ -392,9 +434,10 @@ export async function extendCard(card: HuntCard): Promise<HuntCard> {
   const languages = card.languages ?? (await resolveLanguages(await placeInfoFor(cellFor(card.lat, card.lng))));
   const window = pool.slice(0, TAXA_PER_CALL);
   const names = inatLocalNames(window.map((c) => c.id), languages);
+  const translated = translateNames(window, languages);
   const picks = await choose(card.place, window, false, languages);
   const batch = Math.max(0, ...card.plants.map((p) => p.batch ?? 0)) + 1;
-  const added = await addLocalNames(assemble(window, picks, batch), languages, suggestionsOf(picks), names);
+  const added = await addLocalNames(assemble(window, picks, batch), languages, mergeNames(suggestionsOf(picks), await translated), names);
   const used = new Set(added.map((p) => p.id));
   return {
     ...card,
@@ -446,9 +489,10 @@ function suggestionsOf(picks: z.infer<typeof Pick>): Map<string, Record<string, 
   return m;
 }
 
-/** One-off upgrade for cards saved before local names existed: iNaturalist names only (no model call). */
+/** One-off upgrade for cards saved before names were translated: iNaturalist names plus one translation call. */
 export async function localizeCard(card: HuntCard): Promise<HuntCard> {
-  const languages = await resolveLanguages(await placeInfoFor(cellFor(card.lat, card.lng)));
-  const plants = await addLocalNames(card.plants, languages);
-  return { ...card, languages, plants, rev: card.rev + 1 };
+  const languages = card.languages ?? (await resolveLanguages(await placeInfoFor(cellFor(card.lat, card.lng))));
+  const translated = await translateNames(card.plants.map((p) => ({ id: p.id, name: p.name, scientific: p.scientific })), languages);
+  const plants = await addLocalNames(card.plants, languages, translated);
+  return { ...card, languages, plants, namesV: 2, rev: card.rev + 1 };
 }

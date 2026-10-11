@@ -24,6 +24,7 @@ const Reply = z.object({
   hint: text,
   fact: text,
   kind: z.enum(["tree", "shrub", "herb", "climber", "other"]).optional().catch(undefined),
+  best_guess: text,
 });
 
 const MIN_MATCH_CONFIDENCE = 0.6;
@@ -31,17 +32,28 @@ const GENERIC_HINT = "Get closer, keep the leaves or flowers in focus, and shoot
 
 export function buildPrompt(p: PlantInfo, place = ""): string {
   return `You are a careful field botanist checking a photo for a nature scavenger hunt${place ? ` near ${place}` : ""}.
-The player claims this photo shows: ${p.name}${p.scientific ? ` (${p.scientific})` : ""}.
-Identifying traits: ${p.traits || "use your own botanical knowledge of this plant"}
-Common lookalikes: ${p.lookalikes || "none listed"}
+The player says this photo shows: ${p.name}${p.scientific ? ` (${p.scientific})` : ""}.
+Field marks to look for: ${p.traits || "use your own botanical knowledge of this plant"}
+Commonly confused with: ${p.lookalikes || "none listed"}
 
-Look only at what is visible. Decide:
-- "match": the claimed plant is clearly visible and its key traits are consistent.
-- "no_match": the photo clearly shows something else, or no plant.
-- "unsure": too blurry, too far, too dark, or the deciding traits are not visible.
+Work from the photo only, in two steps:
+1. Note the diagnostic features you can actually see: leaf shape and arrangement, leaf edges, flowers, fruit, bark, how the plant grows.
+   Phone photos outdoors are often dim, shaded, slightly soft or a close part of the plant. That is normal: judge what is visible and do not mark a photo down for it.
+2. Decide what plant it most likely is, then whether that is the claimed plant.
+
+Verdict:
+- "match": the visible features fit the claimed plant and do not fit its lookalikes. Two or three diagnostic features are enough; you do not need every trait.
+- "no_match": only when the visible features positively point to a different plant, which you name in "best_guess", or there is no plant in the photo.
+- "unsure": when the features that would settle it cannot be made out (far away, nearly black, badly blurred, a close-up of bark only), or the claimed plant and a lookalike cannot be told apart. Not seeing the claimed plant's features is "unsure", never "no_match".
+
+"confidence" is how sure you are of your verdict, from 0 to 1.
 
 Reply with ONLY this JSON, no markdown:
-{"verdict":"match|no_match|unsure","confidence":0.0-1.0,"reason":"one short sentence on what you saw",
+{"seen":"the features you can see, one sentence",
+ "best_guess":"the plant you think it is, or \"unknown\"",
+ "verdict":"match|no_match|unsure",
+ "confidence":0.0-1.0,
+ "reason":"one short sentence naming the features that decided it",
  "hint":"if not match: one short, specific tip on what to photograph or look for, else empty",
  "fact":"if match: one surprising, true, kid-friendly fact about this plant in under 25 words, else empty",
  "kind":"if match: tree (palms too), shrub (flowering bushes too), herb (small plants, grasses), climber (vines) or other, else omit"}`;
@@ -59,9 +71,11 @@ export function parseReply(raw: string): VerifyResult | null {
   }
   const r = Reply.safeParse(obj);
   if (!r.success) return null;
-  const { verdict: v, confidence, reason, hint, fact, kind } = r.data;
-  // A shaky "match" is not a match: streaks must mean something.
-  const verdict: Verdict = v === "match" && confidence < MIN_MATCH_CONFIDENCE ? "unsure" : v;
+  const { verdict: v, confidence, reason, hint, fact, kind, best_guess } = r.data;
+  // A shaky "match" is not a match: streaks must mean something. And "not that plant" needs a named alternative:
+  // failing to see the features (dim, blurry) is "unsure", not proof of a different plant.
+  const named = best_guess && !/^(unknown|unclear|unidentified|can.?t|cannot|not sure|unsure)/i.test(best_guess);
+  const verdict: Verdict = v === "match" && confidence < MIN_MATCH_CONFIDENCE ? "unsure" : v === "no_match" && !named ? "unsure" : v;
   return verdict === "match"
     ? { verdict, confidence, reason, fact, ...(kind && { kind }) }
     : { verdict, confidence, reason, hint: hint || GENERIC_HINT };

@@ -15,8 +15,12 @@ describe("parseReply", () => {
     expect(r?.verdict).toBe("unsure");
     expect(r?.hint).toBeTruthy();
   });
+  it("treats a miss that names no other plant as unsure (a dim photo is not proof of a different plant)", () => {
+    const r = parseReply('{"verdict":"no_match","confidence":0.9,"reason":"features not visible","hint":"","fact":"","best_guess":"unknown"}');
+    expect(r?.verdict).toBe("unsure");
+  });
   it("accepts null hint/fact and a percentage confidence", () => {
-    const r = parseReply('{"verdict":"no_match","confidence":85,"reason":"smooth edges","hint":null,"fact":null}');
+    const r = parseReply('{"verdict":"no_match","confidence":85,"reason":"smooth edges","hint":null,"fact":null,"best_guess":"Chinaberry"}');
     expect(r?.confidence).toBe(0.85);
   });
   it("returns null for junk", () => {
@@ -77,7 +81,7 @@ describe("verifyPlant", () => {
         text: async () => "temperature does not support 0.2",
         clone() { return this; },
       })
-      .mockResolvedValue(reply({ verdict: "no_match", confidence: 0.9, reason: "r", hint: "h", fact: "" }));
+      .mockResolvedValue(reply({ verdict: "no_match", confidence: 0.9, reason: "r", hint: "h", fact: "", best_guess: "Banyan" }));
     vi.stubGlobal("fetch", fetchMock);
     const out = await fresh({ imageDataUrl: "x", plant });
     expect(out.verdict).toBe("no_match");

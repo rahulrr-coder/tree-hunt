@@ -218,7 +218,6 @@ export function PlantSheet({ plant, cardId, userId, found, autoSnap, onClose, on
                 <>
                   <p className="font-semibold">
                     {stage.res.verdict === "unsure" ? "Not quite sure yet" : `That doesn’t look like ${said}`}
-                    {stage.res.confidence > 0 && ` (${Math.round(stage.res.confidence * 100)}% confident)`}
                   </p>
                   {stage.res.reason && <p className="mt-1">{stage.res.reason}</p>}
                   {stage.res.hint && <p className="mt-2 font-medium">Try this: {stage.res.hint}</p>}
