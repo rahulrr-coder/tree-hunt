@@ -66,4 +66,22 @@ describe("verifyPlant", () => {
     await expect(verifyPlant({ imageDataUrl: "x", plant })).rejects.toBeInstanceOf(ModelError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("drops temperature when the model only supports its default, then succeeds", async () => {
+    vi.resetModules(); // temperature opt-out is module state
+    const { verifyPlant: fresh } = await import("../lib/model");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false, status: 400,
+        text: async () => "temperature does not support 0.2",
+        clone() { return this; },
+      })
+      .mockResolvedValue(reply({ verdict: "no_match", confidence: 0.9, reason: "r", hint: "h", fact: "" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const out = await fresh({ imageDataUrl: "x", plant });
+    expect(out.verdict).toBe("no_match");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).temperature).toBe(0.2);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty("temperature");
+  });
 });

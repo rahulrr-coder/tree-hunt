@@ -64,26 +64,35 @@ export function parseReply(raw: string): VerifyResult | null {
     : { verdict, confidence, reason, hint: hint || GENERIC_HINT };
 }
 
+// Some models (e.g. reasoning models) only accept the default temperature. Learn that from the
+// first 400 and stop sending it, so "any model" really means any model.
+let sendTemperature = true;
+
 async function complete(prompt: string, imageDataUrl: string): Promise<string> {
   const { MODEL_API_KEY, MODEL_BASE_URL, MODEL_NAME } = process.env;
   if (!MODEL_API_KEY || !MODEL_BASE_URL || !MODEL_NAME) {
     throw new ModelError("MODEL_API_KEY, MODEL_BASE_URL and MODEL_NAME must be set.");
   }
-  let res: Response;
-  try {
-    res = await fetch(`${MODEL_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
+  const post = () =>
+    fetch(`${MODEL_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${MODEL_API_KEY}` },
       body: JSON.stringify({
         model: MODEL_NAME,
-        temperature: 0.2,
-        max_tokens: 400,
+        ...(sendTemperature && { temperature: 0.2 }),
         messages: [
           { role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: imageDataUrl } }] },
         ],
       }),
       signal: AbortSignal.timeout(25_000),
     });
+  let res: Response;
+  try {
+    res = await post();
+    if (res.status === 400 && sendTemperature && /temperature/i.test(await res.clone().text())) {
+      sendTemperature = false;
+      res = await post();
+    }
   } catch (e) {
     throw new ModelError(`Model request failed: ${(e as Error).message}`, true);
   }

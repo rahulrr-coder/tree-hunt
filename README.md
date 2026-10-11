@@ -39,8 +39,11 @@ On a phone, the camera and GPS need HTTPS. Test on the deployed URL, or tunnel y
 | Groq / Together | their `/openai/v1` or `/v1` endpoint | a vision model they host |
 | Ollama (local) | `http://localhost:11434/v1` | `gemma3:27b` |
 | OpenAI | `https://api.openai.com/v1` | any vision model |
+| Azure AI Foundry | `https://<resource>.services.ai.azure.com/openai/v1` | your deployment name |
 
-The challenge requires an open-weight model, so keep a Gemma model for the submission. The app itself does not care.
+The client sends only `model` and `messages` (plus `temperature` when the model accepts it), so models that reject
+`max_tokens` or custom temperatures work too. The DEV challenge requires an open-weight model, so use Gemma for the
+submission build; the app itself does not care.
 
 ## How it works
 
