@@ -38,7 +38,6 @@ export function Welcome() {
           maxLength={20}
           required
           autoComplete="nickname"
-          placeholder="e.g. Banyan Bandit"
           className="mt-1 block h-12 w-full rounded-2xl border border-line bg-card px-4 text-lg outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
         />
       </label>
