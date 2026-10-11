@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { HttpError } from "./http";
 import type { StreakState } from "./streak";
 
 // Everything the app needs from storage, as a handful of functions. MongoDB Atlas is the
@@ -84,7 +85,8 @@ function memoryStore(): Store {
 
 async function mongoStore(uri: string, dbName: string): Promise<Store> {
   const { MongoClient } = await import("mongodb");
-  const db = (await new MongoClient(uri).connect()).db(dbName);
+  // Small pool: every serverless instance opens its own, and Atlas free tier caps connections.
+  const db = (await new MongoClient(uri, { maxPoolSize: 5 }).connect()).db(dbName);
   const users = db.collection<User>("users");
   const finds = db.collection<Find>("finds");
   const log = db.collection<Attempt>("verify_log");
@@ -155,7 +157,7 @@ const g = globalThis as { __treehunt?: Promise<Store> };
 export function getStore(): Promise<Store> {
   if (!g.__treehunt) {
     const uri = process.env.MONGODB_URI;
-    if (!uri && process.env.NODE_ENV === "production") throw new Error("MONGODB_URI is required in production.");
+    if (!uri && process.env.NODE_ENV === "production") throw new HttpError(503, "The hunt database is not connected yet. Please try again soon.");
     if (!uri) console.warn("[treehunt] MONGODB_URI not set: using the in-memory store (data resets on restart).");
     g.__treehunt = uri ? mongoStore(uri, process.env.MONGODB_DB || "treehunt") : Promise.resolve(memoryStore());
     g.__treehunt.catch(() => delete g.__treehunt); // let the next request retry a failed connect
