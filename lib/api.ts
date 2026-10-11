@@ -27,7 +27,6 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
 export type Place = { name: string; lat: number; lng: number };
 export type HuntState = {
   card: import("./hunt").HuntCard;
-  model: string | null;
   found: Record<string, string>;
   streak: { current: number; longest: number };
 };

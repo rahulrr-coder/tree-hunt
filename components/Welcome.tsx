@@ -59,7 +59,7 @@ export function Welcome() {
         {busy ? "Starting…" : "Start hunting"}
       </button>
       <p className="text-center text-sm text-muted">
-        No account, no password. Your hunt is built from real plant sightings near you, and your photos are checked by an open AI model.
+        No account, no password. Your hunt is built from real plant sightings near you, and your photos are checked by AI.
       </p>
     </form>
   );

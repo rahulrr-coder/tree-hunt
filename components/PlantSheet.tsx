@@ -12,7 +12,7 @@ type Stage =
   | { name: "result"; photo: string; res: VerifyResponse }
   | { name: "error"; photo: string; message: string };
 
-type Props = { plant: Plant; cardId: string; userId: string; model: string | null; found: boolean; onClose: () => void; onVerified: () => void };
+type Props = { plant: Plant; cardId: string; userId: string; found: boolean; onClose: () => void; onVerified: () => void };
 
 const sleep = (ms: number) => new Promise<null>((r) => setTimeout(() => r(null), ms));
 
@@ -33,7 +33,7 @@ function Stamp() {
   );
 }
 
-export function PlantSheet({ plant, cardId, userId, model, found, onClose, onVerified }: Props) {
+export function PlantSheet({ plant, cardId, userId, found, onClose, onVerified }: Props) {
   const [stage, setStage] = useState<Stage>({ name: "detail" });
   const [noLocation, setNoLocation] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -130,7 +130,7 @@ export function PlantSheet({ plant, cardId, userId, model, found, onClose, onVer
 
         {stage.name === "checking" && (
           <p role="status" className="mt-5 text-center text-lg font-medium">
-            Checking with {model ?? "the model"}…
+            Analysing your photo…
           </p>
         )}
 

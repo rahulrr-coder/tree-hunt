@@ -28,7 +28,6 @@ export const POST = route(async (req: Request) => {
 
   return json({
     card,
-    model: process.env.MODEL_NAME ?? null,
     found: await store.foundByUser(user._id), // plantId -> findId (thumbnail at /api/finds/:id/thumb)
     streak: { current: shownStreak(user, dayKey(new Date(), body.tz ?? user.tz)), longest: user.longestStreak },
   });

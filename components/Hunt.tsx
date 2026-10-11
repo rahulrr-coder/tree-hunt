@@ -161,7 +161,6 @@ export function Hunt() {
           plant={open}
           cardId={card.id}
           userId={user.userId}
-          model={state.model}
           found={Boolean(state.found[open.id])}
           onClose={() => setOpen(null)}
           onVerified={load}

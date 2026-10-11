@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Tree Hunt",
-  description: "Put the phone down. Go find 8 trees. A scavenger hunt for the plants in your city, verified by an open AI model.",
+  description: "Put the phone down. Go find the trees around you. A scavenger hunt built from real plant sightings near you, verified by AI.",
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#F6F1E7" };
 
