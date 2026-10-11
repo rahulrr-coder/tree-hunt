@@ -1,0 +1,87 @@
+{
+  "id": "coimbatore",
+  "city": "Coimbatore",
+  "title": "Coimbatore starter hunt",
+  "plants": [
+    {
+      "id": "neem",
+      "name": "Neem",
+      "tamil": "Vembu",
+      "scientific": "Azadirachta indica",
+      "difficulty": "easy",
+      "clue": "Feathery compound leaves whose narrow, curved leaflets have saw-toothed edges. Crush one: it smells bitter.",
+      "traits": "pinnately compound leaves; leaflets narrow, curved, sickle-shaped with serrated (toothed) margins and an asymmetric base; small white flowers in loose clusters; olive-like fruits turning yellow; dark rough bark",
+      "lookalikes": "curry leaf (leaflets smooth-edged, not toothed)"
+    },
+    {
+      "id": "peepal",
+      "name": "Peepal",
+      "tamil": "Arasamaram",
+      "scientific": "Ficus religiosa",
+      "difficulty": "easy",
+      "clue": "Heart-shaped leaves ending in a long, thin tail. Often beside a temple, with a stone platform round the trunk.",
+      "traits": "heart-shaped (cordate) leaves with a distinctive long drip-tip; leaves on long stalks that flutter; smooth grey bark; small figs",
+      "lookalikes": "banyan (leaves oval and leathery with no long tail)"
+    },
+    {
+      "id": "banyan",
+      "name": "Banyan",
+      "tamil": "Aalamaram",
+      "scientific": "Ficus benghalensis",
+      "difficulty": "easy",
+      "clue": "Look for roots hanging down from the branches like ropes. Big leathery oval leaves with pale veins.",
+      "traits": "aerial prop roots hanging from branches; large thick leathery oval leaves with prominent pale veins; small round red figs; wide spreading canopy",
+      "lookalikes": "peepal (heart-shaped leaves with long tail)"
+    },
+    {
+      "id": "tamarind",
+      "name": "Tamarind",
+      "tamil": "Puliyamaram",
+      "scientific": "Tamarindus indica",
+      "difficulty": "medium",
+      "clue": "Leaves made of many tiny paired leaflets, like a fern. Look for curved, brown, bean-like pods.",
+      "traits": "pinnate leaves with many small oblong paired leaflets; curved brown pods; dense rounded canopy; dark, deeply furrowed bark",
+      "lookalikes": "rain tree, gulmohar (leaflets arranged differently, no brown curved pods)"
+    },
+    {
+      "id": "pungai",
+      "name": "Pongamia",
+      "tamil": "Pungai",
+      "scientific": "Millettia pinnata",
+      "difficulty": "medium",
+      "clue": "A common avenue tree with glossy, bright green leaves of 5 to 7 oval leaflets. Look underneath for flat, woody pods.",
+      "traits": "glossy pinnate leaves with 5-9 broad oval pointed leaflets; flat thick woody pods with a short beak; pale lilac-pink flowers in clusters",
+      "lookalikes": "other avenue trees with dull or much smaller leaflets"
+    },
+    {
+      "id": "moringa",
+      "name": "Moringa",
+      "tamil": "Murungai",
+      "scientific": "Moringa oleifera",
+      "difficulty": "easy",
+      "clue": "Lacy leaves made of tiny round leaflets, and long thin green pods hanging down. Check home gardens and compound walls.",
+      "traits": "finely divided (tripinnate) feathery leaves with small rounded leaflets; long slender ribbed drumstick pods; small creamy-white flowers; slender, slightly drooping branches",
+      "lookalikes": "leucaena / subabul (feathery leaves but flat brown pods)"
+    },
+    {
+      "id": "hibiscus",
+      "name": "Hibiscus",
+      "tamil": "Sembaruthi",
+      "scientific": "Hibiscus rosa-sinensis",
+      "difficulty": "easy",
+      "clue": "Big trumpet-shaped flowers with a long stalk sticking out of the middle. Usually red, often by gates.",
+      "traits": "large five-petalled flowers with a long central staminal column; glossy, toothed, oval leaves; shrub form",
+      "lookalikes": "other large-flowered shrubs without the long central column"
+    },
+    {
+      "id": "curry-leaf",
+      "name": "Curry leaf",
+      "tamil": "Karuveppilai",
+      "scientific": "Murraya koenigii",
+      "difficulty": "hard",
+      "clue": "Tricky: it looks like neem, but the leaflets have smooth edges and smell like a South Indian kitchen.",
+      "traits": "pinnately compound leaves; leaflets small, ovate-lanceolate, smooth or barely wavy margins (not sharply toothed); strongly aromatic; small shrub or small tree",
+      "lookalikes": "neem (leaflets sharply toothed, curved)"
+    }
+  ]
+}

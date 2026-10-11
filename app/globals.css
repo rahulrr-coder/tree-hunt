@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-paper: #f6f1e7;
+  --color-card: #fffdf8;
+  --color-ink: #1f2a1f;
+  --color-muted: #5b6659;
+  --color-leaf: #2f6b3a;
+  --color-leaf-deep: #1e4a27;
+  --color-marigold: #e0a21b;
+  --color-clay: #b5532e;
+  --color-line: #e4dccb;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The "VERIFIED" ink stamp: presses onto the photo in 200 ms. */
+@keyframes stamp {
+  0% { transform: rotate(-8deg) scale(2.2); opacity: 0; }
+  70% { transform: rotate(-8deg) scale(0.94); opacity: 1; }
+  100% { transform: rotate(-8deg) scale(1); opacity: 1; }
+}
+.stamp { animation: stamp 200ms ease-out both; }
+
+@keyframes soft-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.6; }
+}
+.pulse-veil { animation: soft-pulse 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp { animation: none; transform: rotate(-8deg); }
+  .pulse-veil { animation: none; opacity: 0.45; }
+}
+
+.pin {
+  width: 18px; height: 18px; border-radius: 9999px;
+  border: 2px solid #fffdf8; box-shadow: 0 0 0 1px rgba(31, 42, 31, 0.35);
+}
+.leaflet-container { font-family: inherit; background: var(--color-paper); }
