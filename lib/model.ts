@@ -5,7 +5,8 @@ import { z } from "zod";
 // Groq, Together, OpenAI, Ollama and vLLM all accept. Switch provider = change 3 env vars.
 
 export type Verdict = "match" | "no_match" | "unsure";
-export type VerifyResult = { verdict: Verdict; confidence: number; reason: string; hint?: string; fact?: string };
+export type PlantKind = "tree" | "shrub" | "herb" | "climber" | "other";
+export type VerifyResult = { verdict: Verdict; confidence: number; reason: string; hint?: string; fact?: string; kind?: PlantKind };
 type PlantInfo = { name: string; scientific: string; traits: string; lookalikes: string };
 
 /** `retryable` = timeout, network error, 429 or 5xx. Anything else (bad key, bad model) fails fast. */
@@ -22,6 +23,7 @@ const Reply = z.object({
   reason: text,
   hint: text,
   fact: text,
+  kind: z.enum(["tree", "shrub", "herb", "climber", "other"]).optional().catch(undefined),
 });
 
 const MIN_MATCH_CONFIDENCE = 0.6;
@@ -41,7 +43,8 @@ Look only at what is visible. Decide:
 Reply with ONLY this JSON, no markdown:
 {"verdict":"match|no_match|unsure","confidence":0.0-1.0,"reason":"one short sentence on what you saw",
  "hint":"if not match: one short, specific tip on what to photograph or look for, else empty",
- "fact":"if match: one surprising, true, kid-friendly fact about this plant in under 25 words, else empty"}`;
+ "fact":"if match: one surprising, true, kid-friendly fact about this plant in under 25 words, else empty",
+ "kind":"if match: tree (palms too), shrub (flowering bushes too), herb (small plants, grasses), climber (vines) or other, else omit"}`;
 }
 
 /** Tolerates code fences and chatter around the JSON. Returns null when nothing usable. */
@@ -56,11 +59,11 @@ export function parseReply(raw: string): VerifyResult | null {
   }
   const r = Reply.safeParse(obj);
   if (!r.success) return null;
-  const { verdict: v, confidence, reason, hint, fact } = r.data;
+  const { verdict: v, confidence, reason, hint, fact, kind } = r.data;
   // A shaky "match" is not a match: streaks must mean something.
   const verdict: Verdict = v === "match" && confidence < MIN_MATCH_CONFIDENCE ? "unsure" : v;
   return verdict === "match"
-    ? { verdict, confidence, reason, fact }
+    ? { verdict, confidence, reason, fact, ...(kind && { kind }) }
     : { verdict, confidence, reason, hint: hint || GENERIC_HINT };
 }
 
@@ -74,13 +77,13 @@ export async function ask(prompt: string, imageDataUrl?: string, timeoutMs = 25_
   if (!MODEL_API_KEY || !MODEL_BASE_URL || !MODEL_NAME) {
     throw new ModelError("MODEL_API_KEY, MODEL_BASE_URL and MODEL_NAME must be set.");
   }
-  const post = () =>
+  const post = (withTemperature: boolean) =>
     fetch(`${MODEL_BASE_URL.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${MODEL_API_KEY}` },
       body: JSON.stringify({
         model: MODEL_NAME,
-        ...(sendTemperature && { temperature: 0.2 }),
+        ...(withTemperature && { temperature: 0.2 }),
         messages: [
           {
             role: "user",
@@ -94,10 +97,11 @@ export async function ask(prompt: string, imageDataUrl?: string, timeoutMs = 25_
     });
   let res: Response;
   try {
-    res = await post();
-    if (res.status === 400 && sendTemperature && /temperature/i.test(await res.clone().text())) {
+    const sentTemperature = sendTemperature; // decide from what THIS request sent: concurrent calls may flip the flag
+    res = await post(sentTemperature);
+    if (res.status === 400 && sentTemperature && /temperature/i.test(await res.clone().text())) {
       sendTemperature = false;
-      res = await post();
+      res = await post(false);
     }
   } catch (e) {
     throw new ModelError(`Model request failed: ${(e as Error).message}`, true);

@@ -84,4 +84,27 @@ describe("verifyPlant", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).temperature).toBe(0.2);
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty("temperature");
   });
+
+  it("survives two concurrent calls when the model rejects temperature", async () => {
+    vi.resetModules();
+    const { verifyPlant: fresh } = await import("../lib/model");
+    let first = 0;
+    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
+      const sentTemp = "temperature" in JSON.parse(init.body);
+      if (sentTemp) {
+        first++;
+        return { ok: false, status: 400, text: async () => "temperature does not support 0.2", clone() { return this; } };
+      }
+      return reply({ verdict: "match", confidence: 0.9, reason: "r", hint: "", fact: "f", kind: "tree" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const [a, b] = await Promise.all([
+      fresh({ imageDataUrl: "x", plant }),
+      fresh({ imageDataUrl: "x", plant }),
+    ]);
+    expect(a.verdict).toBe("match");
+    expect(b.verdict).toBe("match");
+    expect(a.kind).toBe("tree");
+    expect(first).toBeGreaterThanOrEqual(1);
+  });
 });

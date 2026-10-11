@@ -26,8 +26,10 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
 
 export type Place = { name: string; lat: number; lng: number };
 export type HuntState = {
-  card: import("./hunt").HuntCard;
-  found: Record<string, string>;
+  card: import("./hunt").PublicCard;
+  canLoadMore: boolean;
+  found: Record<string, string>; // plantId -> findId
+  extras: { plantId: string; plantName: string; findId: string }[]; // plants the player added by name
   streak: { current: number; longest: number };
 };
 export const browserTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;

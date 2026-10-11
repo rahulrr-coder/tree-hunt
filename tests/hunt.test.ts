@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { assemble, CELL_ID, cellFor, generateCard, parsePicks } from "../lib/hunt";
+import { assemble, canLoadMore, CELL_ID, cellFor, customId, generateCard, guessKind, languagesFor, parsePicks, publicCard } from "../lib/hunt";
 
 const photo = { url: "https://static.inaturalist.org/photos/1/medium.jpg", license: "cc-by", credit: "(c) Someone, CC BY" };
 const cand = (id: number, name: string, sightings = 10) => ({
@@ -37,12 +37,48 @@ describe("parsePicks", () => {
 
 describe("assemble", () => {
   it("keeps the model's order, then tops up to 8 from the most-sighted plants", () => {
-    const plants = assemble(candidates, [{ id: 105, difficulty: "hard", clue: "Look up", traits: "x", lookalikes: "" }]);
+    const plants = assemble(candidates, [{ id: 105, difficulty: "hard", clue: "Look up", traits: "x", lookalikes: "" }], 0);
     expect(plants).toHaveLength(8);
     expect(plants[0]).toMatchObject({ id: "105", difficulty: "hard", clue: "Look up" });
     expect(plants[1].id).toBe("100");
     expect(new Set(plants.map((p) => p.id)).size).toBe(8);
     expect(plants[1].clue).toBe("Plant 0 is a plant."); // fallback clue from the summary
+    expect(plants.every((p) => p.batch === 0)).toBe(true);
+  });
+  it("tags later batches and keeps the model's kind", () => {
+    const plants = assemble(candidates, [{ id: 101, kind: "climber", difficulty: "easy", clue: "Twines", traits: "", lookalikes: "" }], 2, 3);
+    expect(plants).toHaveLength(3);
+    expect(plants[0]).toMatchObject({ kind: "climber", batch: 2 });
+  });
+});
+
+describe("categories and show-more helpers", () => {
+  it("guesses a kind from text", () => {
+    expect(guessKind("A woody climber with tendrils")).toBe("climber");
+    expect(guessKind("is a tree in the mahogany family")).toBe("tree");
+    expect(guessKind("an annual herb")).toBe("herb");
+  });
+  it("hides the server-side pool from clients and knows when more can load", () => {
+    const card = { id: "1_1", place: "X", lat: 0, lng: 0, plants: [], pool: [candidates[0]], rev: 0, source: "ai" as const, createdAt: "" };
+    expect(publicCard(card)).not.toHaveProperty("pool");
+    expect(canLoadMore(card)).toBe(true);
+    expect(canLoadMore({ ...card, pool: [] })).toBe(false);
+    expect(canLoadMore({ ...card, pool: undefined })).toBe(true); // legacy card: unknown, so allow a try
+  });
+  it("makes a stable id for a plant the player names", () => {
+    expect(customId("Rain Tree")).toBe("custom-rain-tree");
+    expect(customId("  Ficus  benghalensis. ")).toBe("custom-ficus-benghalensis");
+    expect(customId("வேம்பு")).toMatch(/^custom-/);
+  });
+});
+
+describe("languagesFor", () => {
+  it("uses the state in India and the country elsewhere", () => {
+    expect(languagesFor("India", "Tamil Nadu").map((l) => l.code)).toEqual(["ta"]);
+    expect(languagesFor("India", "Maharashtra").map((l) => l.code)).toEqual(["mr", "hi"]);
+    expect(languagesFor("India", "Delhi").map((l) => l.code)).toEqual(["hi"]);
+    expect(languagesFor("Japan").map((l) => l.code)).toEqual(["ja"]);
+    expect(languagesFor("Canada")).toEqual([]);
   });
 });
 
@@ -85,6 +121,8 @@ describe("generateCard", () => {
     expect(card.plants[0].photo.url).toBe("https://x/100.jpg");
     expect(card.plants[0].photo.license).toBe("cc-by");
     expect(card.id).toMatch(CELL_ID);
+    expect(card.pool?.length).toBe(4); // 12 candidates, 8 shown
+    expect(card.rev).toBe(0);
   });
 
   it("falls back to sightings-only text when the model fails", async () => {

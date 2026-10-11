@@ -1,5 +1,6 @@
 import { getStore } from "@/lib/db";
-import { HttpError, json, parseBody, route } from "@/lib/http";
+import { customId } from "@/lib/hunt";
+import { HttpError, json, limitIp, llmBudget, parseBody, route } from "@/lib/http";
 import { ModelError, verifyPlant } from "@/lib/model";
 import { VerifyBody } from "@/lib/schemas";
 import { applyFind, dayKey, shownStreak } from "@/lib/streak";
@@ -7,9 +8,19 @@ import { applyFind, dayKey, shownStreak } from "@/lib/streak";
 export const POST = route(async (req: Request) => {
   const body = await parseBody(req, VerifyBody);
   const store = await getStore();
+  await limitIp(store, req, "verify", 60, 3600, "That's a lot of photos from one place. Please try again later.");
   const card = await store.getCard(body.cardId);
-  const plant = card?.plants.find((p) => p.id === body.plantId);
-  if (!card || !plant) throw new HttpError(400, "Unknown plant.");
+  if (!card) throw new HttpError(400, "Unknown hunt card.");
+
+  // A plant from the card, or one the player names themselves (verified the same way, just with no traits to go on).
+  const typed = body.customName?.toLowerCase();
+  const plant =
+    body.plantId === "custom"
+      ? (card.plants.find((p) => p.name.toLowerCase() === typed || p.scientific.toLowerCase() === typed) ?? {
+          id: customId(body.customName!), name: body.customName!, scientific: "", traits: "", lookalikes: "",
+        })
+      : card.plants.find((p) => p.id === body.plantId);
+  if (!plant) throw new HttpError(400, "Unknown plant.");
 
   const user = await store.getUser(body.userId);
   if (!user) throw new HttpError(404, "Please pick a nickname again.");
@@ -19,6 +30,7 @@ export const POST = route(async (req: Request) => {
     throw new HttpError(429, "That's a lot of photos. Take a walk and try again in a little while.");
   }
 
+  await llmBudget(store);
   const started = Date.now();
   let result;
   try {
@@ -34,6 +46,7 @@ export const POST = route(async (req: Request) => {
 
   await store.addFind({
     userId: user._id, nickname: user.nickname, cardId: card.id, plantId: plant.id, plantName: plant.name,
+    kind: ("kind" in plant ? plant.kind : undefined) ?? result.kind ?? "other",
     lat: body.lat, lng: body.lng, thumb: body.thumb,
     confidence: result.confidence, verdict: "match", reason: result.reason, fact: result.fact ?? "",
   });

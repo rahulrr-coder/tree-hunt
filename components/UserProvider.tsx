@@ -34,8 +34,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setUserState(read<User>("treehunt:user"));
-    setPlaceState(read<Place>("treehunt:place"));
+    const u = read<User>("treehunt:user");
+    const p = read<Place>("treehunt:place");
+    setUserState(u && typeof u.userId === "string" && typeof u.nickname === "string" ? u : null);
+    setPlaceState(p && typeof p.lat === "number" && typeof p.lng === "number" && typeof p.name === "string" ? p : null);
     setReady(true);
   }, []);
 

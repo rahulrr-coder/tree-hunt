@@ -1,10 +1,14 @@
-import { json, route } from "@/lib/http";
+import { getStore } from "@/lib/db";
+import { placeNameFor } from "@/lib/hunt";
+import { json, limitIp, parseBody, route } from "@/lib/http";
+import { WhereBody } from "@/lib/schemas";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-// City-level fallback for when browser GPS fails. Netlify's edge already resolves the caller's
+// GET: city-level guess for when browser GPS fails. Netlify's edge already resolves the caller's
 // network to a city and passes it in `x-nf-geo`; nothing is sent to a third party and nothing is stored.
 export const GET = route(async (req: Request) => {
+  await limitIp(await getStore(), req, "where", 20, 60);
   const raw = req.headers.get("x-nf-geo");
   if (raw) {
     try {
@@ -18,4 +22,11 @@ export const GET = route(async (req: Request) => {
     } catch {}
   }
   return json({ place: null });
+});
+
+// POST: "where is this point?" so a GPS fix can be shown as a place name for the player to confirm.
+export const POST = route(async (req: Request) => {
+  const { lat, lng } = await parseBody(req, WhereBody);
+  await limitIp(await getStore(), req, "where", 20, 60);
+  return json({ name: await placeNameFor({ lat, lng }) });
 });

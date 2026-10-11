@@ -1,18 +1,19 @@
 "use client";
 import "leaflet/dist/leaflet.css";
-import { LoaderCircle, LocateFixed, Search } from "lucide-react";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { useEffect, useRef, useState } from "react";
 import { api, type Place } from "@/lib/api";
 import { CELL_DEGREES, cellFor } from "@/lib/cell";
-import { approxPlace, locateMe, searchPlaces } from "@/lib/places";
+import { colorOfKind, KIND_FILTERS, type FindKind, type KindFilter } from "@/lib/categories";
+import { ConfirmPlace, PlaceName, Spinner } from "./PlaceChooser";
+import { usePlaceFlow } from "./usePlaceFlow";
 import { useUser } from "./UserProvider";
 
-type Pin = { id: string; nickname: string; plantId: string; plantName: string; lat: number; lng: number; createdAt: string };
+type Pin = { id: string; nickname: string; plantId: string; plantName: string; kind: FindKind; lat: number; lng: number; createdAt: string };
 type LeafletMap = import("leaflet").Map;
 type Leaflet = typeof import("leaflet");
 
-const COLORS = ["#2f6b3a", "#b5532e", "#3d6fb5", "#8a5a9e", "#c28a12", "#1f8a8a", "#a63d5a", "#5b6659"];
-const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 function ago(iso: string): string {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -38,19 +39,17 @@ function popup(pin: Pin): HTMLElement {
 }
 
 export function MapView() {
-  const { place, ready, setPlace } = useUser();
+  const { user, place, ready, setPlace } = useUser();
   const box = useRef<HTMLDivElement>(null);
   const lib = useRef<Leaflet | null>(null);
   const map = useRef<LeafletMap | null>(null);
   const area = useRef<import("leaflet").Rectangle | null>(null);
+  const cluster = useRef<import("leaflet").MarkerClusterGroup | null>(null);
+  const [kind, setKind] = useState<KindFilter>("all");
+  const [mine, setMine] = useState(false);
+  const [pins, setPins] = useState<Pin[] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [emptyNote, setEmptyNote] = useState("");
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Place[]>([]);
-  const [locating, setLocating] = useState(false);
-  const [note, setNote] = useState("");
-  const [approx, setApprox] = useState<Place | null>(null);
-
   // Create the map once the saved place is known, so it opens on the right town.
   useEffect(() => {
     if (!ready) return;
@@ -66,27 +65,55 @@ export function MapView() {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(m);
+      (window as unknown as { L: Leaflet }).L = L; // the cluster plugin looks for a global L
+      await import("leaflet.markercluster");
+      if (cancelled) return;
+      cluster.current = L.markerClusterGroup({ maxClusterRadius: 45, showCoverageOnHover: false }).addTo(m);
       map.current = m;
       setMapReady(true);
-      try {
-        const { finds } = await api<{ finds: Pin[] }>("/api/finds?limit=200");
-        if (cancelled) return;
-        if (!finds.length) setEmptyNote("No finds yet. Be the first.");
-        for (const f of finds) {
-          const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${COLORS[hash(f.plantId) % COLORS.length]}"></div>`, iconSize: [18, 18] });
-          L.marker([f.lat, f.lng], { icon }).addTo(m).bindPopup(() => popup(f));
-        }
-      } catch (e) {
-        if (!cancelled) setEmptyNote((e as Error).message);
-      }
     })();
     return () => {
       cancelled = true;
       map.current?.remove();
       map.current = null;
+      cluster.current = null;
       setMapReady(false);
     };
   }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load pins whenever the category changes.
+  useEffect(() => {
+    if (!mapReady) return;
+    let stale = false;
+    api<{ finds: Pin[] }>(`/api/finds?limit=200&kind=${kind}`).then(
+      ({ finds }) => {
+        if (stale) return;
+        setPins(finds);
+        setEmptyNote("");
+      },
+      (e: Error) => {
+        if (!stale) setEmptyNote(e.message);
+      },
+    );
+    return () => {
+      stale = true;
+    };
+  }, [mapReady, kind]);
+
+  // Draw them (clustered), optionally only the player's own.
+  useEffect(() => {
+    const L = lib.current, group = cluster.current;
+    if (!L || !group || !pins) return;
+    group.clearLayers();
+    const mineName = user?.nickname.toLowerCase();
+    const shown = pins.filter((f) => !mine || f.nickname.toLowerCase() === mineName);
+    for (const f of shown) {
+      const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${colorOfKind(f.kind)}"></div>`, iconSize: [18, 18] });
+      group.addLayer(L.marker([f.lat, f.lng], { icon }).bindPopup(() => popup(f)));
+    }
+    if (!shown.length) setEmptyNote(mine ? "You have no pinned finds yet." : kind === "all" ? "No finds yet. Be the first." : "No finds in this category yet.");
+    else setEmptyNote("");
+  }, [pins, mine, user, kind]);
 
   // Outline the ~28 km area the hunt card covers, so the map explains what "my hunt" is.
   useEffect(() => {
@@ -99,86 +126,108 @@ export function MapView() {
     }).addTo(m);
   }, [mapReady, place]);
 
-  useEffect(() => {
-    if (query.trim().length < 2) return setResults([]);
-    const ctl = new AbortController();
-    const t = setTimeout(() => searchPlaces(query.trim(), ctl.signal).then(setResults, () => {}), 300);
-    return () => {
-      clearTimeout(t);
-      ctl.abort();
-    };
-  }, [query]);
-
   function go(p: Place) {
     setPlace(p); // the map and the hunt card share one "where am I hunting"
     map.current?.flyTo([p.lat, p.lng], 12);
-    setQuery("");
-    setResults([]);
-    setNote("");
-    setApprox(null);
   }
+  const flow = usePlaceFlow(go);
 
-  async function locate() {
-    setNote("");
-    setApprox(null);
-    setLocating(true);
-    try {
-      go(await locateMe());
-    } catch (e) {
-      setNote((e as Error).message);
-      setApprox(await approxPlace());
-    } finally {
-      setLocating(false);
-    }
-  }
+  // Preview a candidate place on the map while the player decides whether to confirm it.
+  useEffect(() => {
+    if (flow.pending) map.current?.flyTo([flow.pending.lat, flow.pending.lng], 11);
+  }, [flow.pending]);
 
   return (
     <div className="fixed inset-x-0 bottom-0 top-14 isolate z-0">
       <div ref={box} className="size-full" role="application" aria-label="Map of verified finds" />
 
       <div className="pointer-events-none absolute inset-x-3 top-3 z-[1000] flex flex-col gap-2 sm:right-auto sm:w-96">
-        <div className="pointer-events-auto flex gap-2">
-          <label className="relative block flex-1">
-            <span className="sr-only">Search for a town or city</span>
-            <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" aria-hidden />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search a town or city"
-              className="block h-12 w-full rounded-2xl border border-line bg-card pl-11 pr-3 text-base shadow-sm outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
-            />
-          </label>
-          <button
-            onClick={locate}
-            disabled={locating}
-            aria-label="Use my location"
-            className="grid size-12 shrink-0 place-items-center rounded-2xl border border-line bg-card text-leaf shadow-sm active:bg-paper"
-          >
-            {locating ? <LoaderCircle size={20} className="animate-spin" /> : <LocateFixed size={20} />}
-          </button>
-        </div>
+        {flow.pending ? (
+          <div className="pointer-events-auto">
+            <ConfirmPlace place={flow.pending} onYes={flow.confirm} onNo={flow.cancel} />
+          </div>
+        ) : (
+          <>
+            <div className="pointer-events-auto flex gap-2">
+              <label className="relative block flex-1">
+                <span className="sr-only">Search for a town or city</span>
+                <input
+                  value={flow.query}
+                  onChange={(e) => flow.setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && flow.results[0]) {
+                      e.preventDefault();
+                      flow.choose(flow.results[0]);
+                    }
+                  }}
+                  placeholder="Search a town or city"
+                  autoComplete="off"
+                  className="block h-12 w-full rounded-2xl border border-line bg-card px-4 text-base shadow-sm outline-none focus:border-leaf focus:ring-2 focus:ring-leaf/30"
+                />
+                {flow.searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted"><Spinner small /></span>}
+              </label>
+              <button
+                onClick={flow.locate}
+                disabled={flow.locating}
+                className="flex h-12 shrink-0 items-center gap-2 rounded-2xl border border-leaf bg-card px-4 text-sm font-semibold text-leaf shadow-sm active:bg-paper"
+              >
+                {flow.locating && <Spinner small />}
+                {flow.locating ? "Finding…" : "Locate me"}
+              </button>
+            </div>
 
-        {results.length > 0 && (
-          <ul className="pointer-events-auto overflow-hidden rounded-2xl border border-line bg-card shadow-sm">
-            {results.map((r, i) => (
-              <li key={`${r.lat},${r.lng},${i}`} className="border-t border-line first:border-t-0">
-                <button onClick={() => go(r)} className="block min-h-11 w-full px-4 py-3 text-left active:bg-paper">
-                  {r.name}
+            <div className="pointer-events-auto -mx-3 flex gap-2 overflow-x-auto px-3 pb-1" role="tablist" aria-label="Plant categories">
+              {KIND_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  role="tab"
+                  aria-selected={kind === f.id}
+                  onClick={() => setKind(f.id)}
+                  className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold shadow-sm ${
+                    kind === f.id ? "border-leaf bg-leaf text-white" : "border-line bg-card text-ink"
+                  }`}
+                >
+                  {f.id !== "all" && <span className="size-2.5 rounded-full" style={{ background: f.color }} aria-hidden />}
+                  {f.label}
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {note && <p role="alert" className="pointer-events-auto rounded-2xl border border-clay/40 bg-card px-4 py-3 text-sm text-clay shadow-sm">{note}</p>}
-        {approx && (
-          <button onClick={() => go(approx)} className="pointer-events-auto min-h-11 rounded-2xl border border-line bg-card px-4 py-2 text-left text-sm shadow-sm active:bg-paper">
-            Use <strong>{approx.name}</strong> <span className="text-muted">(approximate, from your network)</span>
-          </button>
-        )}
-        {emptyNote && !results.length && !note && (
-          <p role="status" className="pointer-events-auto rounded-2xl border border-line bg-card px-4 py-3 text-center font-medium shadow-sm">
-            {emptyNote}
-          </p>
+              ))}
+              {user && (
+                <button
+                  aria-pressed={mine}
+                  onClick={() => setMine((v) => !v)}
+                  className={`h-9 shrink-0 rounded-full border px-3 text-sm font-semibold shadow-sm ${
+                    mine ? "border-marigold bg-marigold text-ink" : "border-line bg-card text-ink"
+                  }`}
+                >
+                  My finds
+                </button>
+              )}
+            </div>
+
+            {flow.results.length > 0 && (
+              <ul className="pointer-events-auto overflow-hidden rounded-2xl border border-line bg-card shadow-sm">
+                {flow.results.map((r, i) => (
+                  <li key={`${r.lat},${r.lng},${i}`} className="border-t border-line first:border-t-0">
+                    <button onClick={() => flow.choose(r)} className="block min-h-12 w-full px-4 py-3 text-left active:bg-paper">
+                      <PlaceName name={r.name} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {flow.noMatches && <p className="pointer-events-auto rounded-2xl border border-line bg-card px-4 py-3 text-sm text-muted shadow-sm">No places match that. Check the spelling or try a bigger nearby town.</p>}
+            {flow.note && <p role="alert" className="pointer-events-auto rounded-2xl border border-clay/40 bg-card px-4 py-3 text-sm text-clay shadow-sm">{flow.note}</p>}
+            {flow.approx && (
+              <button onClick={() => flow.choose(flow.approx!)} className="pointer-events-auto min-h-11 rounded-2xl border border-line bg-card px-4 py-2 text-left text-sm shadow-sm active:bg-paper">
+                Use <strong>{flow.approx.name}</strong> <span className="text-muted">(approximate, from your network)</span>
+              </button>
+            )}
+            {emptyNote && !flow.results.length && !flow.note && (
+              <p role="status" className="pointer-events-auto rounded-2xl border border-line bg-card px-4 py-3 text-center font-medium shadow-sm">
+                {emptyNote}
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

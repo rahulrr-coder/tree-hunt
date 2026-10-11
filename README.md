@@ -46,6 +46,42 @@ player's place --> cell (~28 km)  --cache miss-->  iNaturalist: most-sighted pla
   non-commercial variants). The credit and a link back are shown with every photo.
 - **Place search** uses Open-Meteo's free geocoder. "Use my location" sends a position rounded to about 1 km.
 
+## More than eight plants, and plants that aren't listed
+
+- **Categories:** the first batch is the 8 most common plants. "Show more plants" adds 8 at a time (up to 56) from the
+  real sightings not shown yet. Chips filter by Most common, All, Trees, Shrubs & flowers, Herbs & climbers, and Found.
+  The Map and the Board use the same categories.
+- **Add a plant that isn't on the list:** type its name, snap it, and the checker confirms the photo matches the name.
+  It is saved under "Plants you added" and counts toward your streak. Because there are no traits to check against, up
+  to 5 of these count on the leaderboard, so it can't be farmed.
+- **Local names:** the area's language(s) are picked from its state or country (Tamil Nadu: Tamil; Maharashtra: Marathi
+  and Hindi). iNaturalist's own names are used where it has them; otherwise the model suggests one and it is labelled as
+  an AI suggestion.
+
+## Install it like an app
+
+It is a PWA (manifest, icons, service worker). Android Chrome: menu, then *Install app* (the app also offers a button).
+iPhone Safari: Share, then *Add to Home Screen*. The service worker caches nothing, so there is no offline mode and a new
+deploy is never hidden behind a stale copy.
+
+## Rate limits and security
+
+Counters live in MongoDB (`rate_limits`, expiring), so they hold across serverless instances:
+
+| What | Limit |
+|---|---|
+| Photo checks | 20 per player per hour (`VERIFY_RATE_LIMIT_PER_HOUR`), 60 per network per hour |
+| New hunt areas / "show more" | 6 / 12 per player per hour |
+| Sign-ups | 10 per network per hour |
+| Place search, location lookup | 90 / 20 per network per minute |
+| Hunts, show more | 30 / 10 per network per minute |
+| Map, board, photos | 120 / 240 per network per minute |
+| All model calls together | `LLM_BUDGET_PER_HOUR` (default 400) |
+
+Also: every request body is validated with zod, images are capped at about 2 MB, nicknames and plant names are
+character-restricted (they reach a prompt), `userId` is never returned by public endpoints, and the app sends
+`nosniff`, `X-Frame-Options: DENY`, a strict referrer policy and a camera/location-only permissions policy.
+
 ## Use any model
 
 `lib/model.ts` is the only file that talks to a model. It calls the OpenAI-compatible
@@ -75,7 +111,8 @@ submission build; the app itself does not care.
 ## Environment
 
 See `.env.example`. `MODEL_*` select the model; `MONGODB_URI` / `MONGODB_DB` select storage;
-`VERIFY_RATE_LIMIT_PER_HOUR` caps photo checks per player; `APP_TIMEZONE` is the fallback streak timezone.
+`VERIFY_RATE_LIMIT_PER_HOUR` caps photo checks per player; `LLM_BUDGET_PER_HOUR` caps all model calls together;
+`APP_TIMEZONE` is the fallback streak timezone.
 
 ## Deploy
 

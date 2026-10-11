@@ -41,3 +41,18 @@ export async function approxPlace(): Promise<Place | null> {
     return null;
   }
 }
+
+/** Turn a GPS fix into a place name the player can recognise and confirm. */
+export async function nameFor(p: Place): Promise<string> {
+  try {
+    const res = await fetch("/api/where", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lat: p.lat, lng: p.lng }),
+    });
+    const { name } = (await res.json()) as { name?: string };
+    return name && name !== "Your area" ? name : p.name;
+  } catch {
+    return p.name;
+  }
+}
