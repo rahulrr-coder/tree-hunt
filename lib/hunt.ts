@@ -167,7 +167,8 @@ type PlaceInfo = { name: string; region?: string; country?: string };
 /** "Coimbatore, Tamil Nadu" plus its state and country, from iNaturalist's places around a point. */
 export async function placeInfoFor(point: { lat: number; lng: number }): Promise<PlaceInfo> {
   try {
-    const d = 0.1;
+    // A tiny box, so only the places that contain the point come back (a wide one pulls in the neighbouring district).
+    const d = 0.005;
     const r = await inat<{ results: { standard?: { name: string; admin_level: number | null }[] } }>("/v1/places/nearby", {
       nelat: point.lat + d, nelng: point.lng + d, swlat: point.lat - d, swlng: point.lng - d, per_page: 10,
     });
