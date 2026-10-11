@@ -8,6 +8,9 @@ model checks that the photo shows that plant. Verified finds land on a shared co
 
 Built for the DEV Hacktoberfest Open-Source AI Challenge, Week 1 ("Touch Grass").
 
+**Live app:** https://tree-hunt-rahul.netlify.app
+**Demo video:** https://youtube.com/shorts/SzxyTaFop2E
+
 ## Run it
 
 ```bash
