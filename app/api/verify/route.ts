@@ -1,18 +1,16 @@
 import { getStore } from "@/lib/db";
-import { getCard } from "@/lib/huntCards";
 import { HttpError, json, parseBody, route } from "@/lib/http";
 import { ModelError, verifyPlant } from "@/lib/model";
 import { VerifyBody } from "@/lib/schemas";
 import { applyFind, dayKey, shownStreak } from "@/lib/streak";
 
-const CARD_ID = "coimbatore"; // one seeded city for now
-
 export const POST = route(async (req: Request) => {
   const body = await parseBody(req, VerifyBody);
-  const plant = getCard(CARD_ID)?.plants.find((p) => p.id === body.plantId);
-  if (!plant) throw new HttpError(400, "Unknown plant.");
-
   const store = await getStore();
+  const card = await store.getCard(body.cardId);
+  const plant = card?.plants.find((p) => p.id === body.plantId);
+  if (!card || !plant) throw new HttpError(400, "Unknown plant.");
+
   const user = await store.getUser(body.userId);
   if (!user) throw new HttpError(404, "Please pick a nickname again.");
 
@@ -24,7 +22,7 @@ export const POST = route(async (req: Request) => {
   const started = Date.now();
   let result;
   try {
-    result = await verifyPlant({ imageDataUrl: body.image, plant });
+    result = await verifyPlant({ imageDataUrl: body.image, plant, place: card.place });
   } catch (e) {
     await store.logAttempt({ userId: user._id, plantId: plant.id, verdict: "error", confidence: 0, latencyMs: Date.now() - started });
     console.error("[verify]", e instanceof ModelError ? e.message : e);
@@ -35,14 +33,15 @@ export const POST = route(async (req: Request) => {
   if (result.verdict !== "match") return json(result);
 
   await store.addFind({
-    userId: user._id, nickname: user.nickname, cardId: CARD_ID, plantId: plant.id,
+    userId: user._id, nickname: user.nickname, cardId: card.id, plantId: plant.id, plantName: plant.name,
     lat: body.lat, lng: body.lng, thumb: body.thumb,
     confidence: result.confidence, verdict: "match", reason: result.reason, fact: result.fact ?? "",
   });
-  const today = dayKey();
+  const tz = body.tz ?? user.tz;
+  const today = dayKey(new Date(), tz);
   const before = shownStreak(user, today);
   const next = applyFind(user, today);
-  await store.setStreak(user._id, next);
+  await store.setStreak(user._id, next, tz);
   return json({
     ...result,
     streak: { current: next.currentStreak, longest: next.longestStreak, increased: next.currentStreak > before },

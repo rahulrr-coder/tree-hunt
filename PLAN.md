@@ -20,6 +20,25 @@ The goal was the same product with fewer moving parts. Everything below is alrea
 Dependencies, total: `next`, `react`, `react-dom`, `mongodb`, `zod`, `leaflet`, `lucide-react`. Dev: TypeScript,
 Tailwind, Vitest, tsx.
 
+## 1b. Update: hunt cards are generated from real sightings
+
+The hand-written Coimbatore card is gone. Any place on Earth now gets a card:
+
+1. The player picks "Use my location" or searches a town. Only a position rounded to ~1 km is sent.
+2. The server snaps it to a ~28 km cell and checks `hunt_cards` in Mongo.
+3. On a miss it asks iNaturalist for the ~30 most-sighted plants within 20 km (species with a common name), fetches
+   their Wikipedia summaries and licensed photos in one compact v2 call (80 KB), and asks the model to pick 8
+   beginner-friendly ones and write the clue, traits and lookalikes.
+4. The model can only return ids from the candidate list. Anything else is dropped, and the card is topped up from the
+   most-sighted plants. If the model fails, the card is built from sightings and summaries alone.
+5. The card is saved first-writer-wins, so everyone in a cell shares one hunt (and one community).
+
+Guardrails: 6 new areas per player per hour; at least 5 plants with a reusable photo or the area is refused;
+photos shown with credit and a link; clues labelled as AI-written.
+
+Trade-off: generated traits are less reliable than hand-written ones, so the verifier will be less sharp in obscure
+places. Grounding in real sightings keeps the *species* honest; the *descriptions* are the model's.
+
 ## 2. Stack
 
 | Layer | Choice | Swap path |
@@ -60,7 +79,7 @@ Each row is a trigger, not a task for today.
 | 4 | **Sign-up spam bypasses the per-user rate limit** | One person, many nicknames, many model calls | Per-IP limit, a bot check on `/api/users` (Turnstile), and a global daily model budget. |
 | 5 | **Leaderboard aggregation scans all finds** | `/api/leaderboard` slows past ~100k finds | Maintain per-user counters on write (`$inc` in the verify route) and index them; cache the response for 30 s. |
 | 6 | **Map returns the latest 200 pins globally** | Cluttered or irrelevant when there are many cities | Add a 2dsphere index and a bounding-box query; cluster pins client-side. |
-| 7 | **More cities** | | Add a JSON file in `data/hunt-cards/`, one line in `lib/huntCards.ts`, and a city picker (geolocation picks the default). Cards stay hand-written. |
+| 7 | **Stale or low-quality generated cards** | A card built once never changes; odd picks stick | Add `createdAt`-based refresh (seasonal), a thumbs-down on a plant that rebuilds the card, and a reviewed flag for popular cells. Cell boundaries split towns: switch to place-based keys (iNaturalist place ids) if that bites. |
 | 8 | **Cheating** | Photos of screens, spoofed GPS | Out of scope for a casual game. If it matters: require a second angle, ask for a specific detail ("the underside of a leaf"), and compare against the clue. |
 | 9 | **Observability** | | `verify_log` already records verdict, confidence and latency (7-day TTL). Ship it to a dashboard and alert on error rate. |
 

@@ -1,31 +1,35 @@
 import { randomUUID } from "node:crypto";
+import type { HuntCard } from "./hunt";
 import { HttpError } from "./http";
 import type { StreakState } from "./streak";
 
 // Everything the app needs from storage, as a handful of functions. MongoDB Atlas is the
 // real implementation; the in-memory one (no MONGODB_URI) is for local dev and tests only.
 
-export type User = StreakState & { _id: string; nickname: string; createdAt: Date };
+export type User = StreakState & { _id: string; nickname: string; createdAt: Date; tz?: string };
 export type Find = {
-  _id: string; userId: string; nickname: string; cardId: string; plantId: string;
+  _id: string; userId: string; nickname: string; cardId: string; plantId: string; plantName: string;
   lat: number | null; lng: number | null; thumb: string;
   confidence: number; verdict: "match"; reason: string; fact: string; createdAt: Date;
 };
-export type MapFind = Pick<Find, "_id" | "nickname" | "plantId" | "createdAt"> & { lat: number; lng: number };
-export type BoardRow = StreakState & { nickname: string; totalFinds: number; uniquePlants: number };
+export type MapFind = Pick<Find, "_id" | "nickname" | "plantId" | "plantName" | "createdAt"> & { lat: number; lng: number };
+export type BoardRow = StreakState & { nickname: string; totalFinds: number; uniquePlants: number; tz?: string };
 export type Attempt = { userId: string; plantId: string; verdict: string; confidence: number; latencyMs: number; createdAt: Date };
 
 export interface Store {
   createOrGetUser(nickname: string): Promise<User>;
   getUser(id: string): Promise<User | null>;
-  setStreak(id: string, s: StreakState): Promise<void>;
+  setStreak(id: string, s: StreakState, tz?: string): Promise<void>;
+  getCard(id: string): Promise<HuntCard | null>;
+  /** First writer wins, so everyone in a cell shares one card. Returns the stored card. */
+  saveCard(card: HuntCard): Promise<HuntCard>;
   addFind(f: Omit<Find, "_id" | "createdAt">): Promise<string>;
   /** Latest find id per plant for one user (used for the user's own tile thumbnails). */
   foundByUser(userId: string): Promise<Record<string, string>>;
   mapFinds(limit: number): Promise<MapFind[]>;
   thumb(findId: string): Promise<string | null>;
   leaderboard(limit: number): Promise<BoardRow[]>;
-  attemptsSince(userId: string, since: Date): Promise<number>;
+  attemptsSince(userId: string, since: Date, verdict?: string): Promise<number>;
   logAttempt(a: Omit<Attempt, "createdAt">): Promise<void>;
 }
 
@@ -38,11 +42,12 @@ function memoryStore(): Store {
   const users = new Map<string, User>();
   const finds: Find[] = [];
   const attempts: Attempt[] = [];
+  const cards = new Map<string, HuntCard>();
   const board = (limit: number): BoardRow[] => {
     const by = new Map<string, Find[]>();
     for (const f of finds) by.set(f.userId, [...(by.get(f.userId) ?? []), f]);
     return [...by.entries()]
-      .map(([id, fs]) => ({ ...streakOf(users.get(id)!), nickname: users.get(id)!.nickname, totalFinds: fs.length, uniquePlants: new Set(fs.map((f) => f.plantId)).size }))
+      .map(([id, fs]) => ({ ...streakOf(users.get(id)!), tz: users.get(id)!.tz, nickname: users.get(id)!.nickname, totalFinds: fs.length, uniquePlants: new Set(fs.map((f) => f.plantId)).size }))
       .sort((a, b) => b.uniquePlants - a.uniquePlants || b.totalFinds - a.totalFinds || a.nickname.localeCompare(b.nickname))
       .slice(0, limit);
   };
@@ -55,8 +60,13 @@ function memoryStore(): Store {
       return u;
     },
     getUser: async (id) => users.get(id) ?? null,
-    async setStreak(id, s) {
-      Object.assign(users.get(id)!, s);
+    async setStreak(id, s, tz) {
+      Object.assign(users.get(id)!, s, tz && { tz });
+    },
+    getCard: async (id) => cards.get(id) ?? null,
+    async saveCard(card) {
+      if (!cards.has(card.id)) cards.set(card.id, card);
+      return cards.get(card.id)!;
     },
     async addFind(f) {
       const doc = { ...f, _id: randomUUID(), createdAt: new Date() };
@@ -72,11 +82,12 @@ function memoryStore(): Store {
       return finds
         .filter((f): f is Find & { lat: number; lng: number } => f.lat !== null && f.lng !== null)
         .slice(-limit).reverse()
-        .map(({ _id, nickname, plantId, createdAt, lat, lng }) => ({ _id, nickname, plantId, createdAt, lat, lng }));
+        .map(({ _id, nickname, plantId, plantName, createdAt, lat, lng }) => ({ _id, nickname, plantId, plantName, createdAt, lat, lng }));
     },
     thumb: async (id) => finds.find((f) => f._id === id)?.thumb ?? null,
     leaderboard: async (limit) => board(limit),
-    attemptsSince: async (userId, since) => attempts.filter((a) => a.userId === userId && a.createdAt >= since).length,
+    attemptsSince: async (userId, since, verdict) =>
+      attempts.filter((a) => a.userId === userId && a.createdAt >= since && (!verdict || a.verdict === verdict)).length,
     async logAttempt(a) {
       attempts.push({ ...a, createdAt: new Date() });
     },
@@ -90,6 +101,7 @@ async function mongoStore(uri: string, dbName: string): Promise<Store> {
   const users = db.collection<User>("users");
   const finds = db.collection<Find>("finds");
   const log = db.collection<Attempt>("verify_log");
+  const cards = db.collection<HuntCard & { _id: string }>("hunt_cards");
   const ci = { locale: "en", strength: 2 } as const; // case-insensitive nicknames
   await Promise.all([
     users.createIndex({ nickname: 1 }, { unique: true, collation: ci }),
@@ -109,8 +121,23 @@ async function mongoStore(uri: string, dbName: string): Promise<Store> {
       return u!;
     },
     getUser: (id) => users.findOne({ _id: id }),
-    async setStreak(id, s) {
-      await users.updateOne({ _id: id }, { $set: s });
+    async setStreak(id, s, tz) {
+      await users.updateOne({ _id: id }, { $set: { ...s, ...(tz && { tz }) } });
+    },
+    async getCard(id) {
+      const doc = await cards.findOne({ _id: id });
+      if (!doc) return null;
+      const { _id, ...card } = doc;
+      return card;
+    },
+    async saveCard(card) {
+      const doc = await cards.findOneAndUpdate(
+        { _id: card.id },
+        { $setOnInsert: card },
+        { upsert: true, returnDocument: "after" },
+      );
+      const { _id, ...stored } = doc!;
+      return stored;
     },
     async addFind(f) {
       const doc = { ...f, _id: randomUUID(), createdAt: new Date() };
@@ -125,7 +152,7 @@ async function mongoStore(uri: string, dbName: string): Promise<Store> {
     },
     async mapFinds(limit) {
       return (await finds
-        .find({ lat: { $ne: null }, lng: { $ne: null } }, { projection: { nickname: 1, plantId: 1, createdAt: 1, lat: 1, lng: 1 } })
+        .find({ lat: { $ne: null }, lng: { $ne: null } }, { projection: { nickname: 1, plantId: 1, plantName: 1, createdAt: 1, lat: 1, lng: 1 } })
         .sort({ createdAt: -1 }).limit(limit).toArray()) as MapFind[];
     },
     async thumb(id) {
@@ -141,10 +168,11 @@ async function mongoStore(uri: string, dbName: string): Promise<Store> {
       const owners = await users.find({ _id: { $in: rows.map((r) => r._id) } }).toArray();
       const byId = new Map(owners.map((u) => [u._id, u]));
       return rows.map((r) => ({
-        ...streakOf(byId.get(r._id)!), nickname: r.nickname, totalFinds: r.totalFinds, uniquePlants: r.plants.length,
+        ...streakOf(byId.get(r._id)!), tz: byId.get(r._id)!.tz, nickname: r.nickname, totalFinds: r.totalFinds, uniquePlants: r.plants.length,
       }));
     },
-    attemptsSince: (userId, since) => log.countDocuments({ userId, createdAt: { $gte: since } }),
+    attemptsSince: (userId, since, verdict) =>
+      log.countDocuments({ userId, createdAt: { $gte: since }, ...(verdict && { verdict }) }),
     async logAttempt(a) {
       await log.insertOne({ ...a, createdAt: new Date() });
     },

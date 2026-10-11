@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { CELL_ID } from "./hunt";
 import { round3 } from "./photo";
+import { isTz } from "./streak";
 
 const jpeg = (maxChars: number) => z.string().startsWith("data:image/jpeg;base64,").max(maxChars);
 const coord = (limit: number) =>
@@ -9,9 +11,20 @@ export const UserBody = z.object({
   nickname: z.string().trim().min(2).max(20).regex(/^[\p{L}\p{N} _.-]+$/u, "Letters, numbers, spaces, . _ - only"),
 });
 
+const tz = z.string().max(64).refine(isTz, "Unknown timezone").optional();
+
+export const HuntBody = z.object({
+  userId: z.string().min(1).max(64),
+  lat: z.number().finite().min(-90).max(90),
+  lng: z.number().finite().min(-180).max(180),
+  tz,
+});
+
 export const VerifyBody = z.object({
   userId: z.string().min(1).max(64),
-  plantId: z.string().min(1).max(40),
+  cardId: z.string().regex(CELL_ID),
+  plantId: z.string().regex(/^\d{1,10}$/),
+  tz,
   image: jpeg(2_800_000), // ~2 MB once decoded
   thumb: jpeg(110_000),
   lat: coord(90),

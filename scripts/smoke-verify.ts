@@ -1,9 +1,9 @@
 // Phase 0 check: run the verifier on real photos before trusting it with the game.
-//   Put photos in scripts/samples/ named <plantId>-<n>.jpg (should match) or
-//   not-<plantId>-<n>.jpg (should NOT match the claimed plant), then: npm run smoke
+//   Put photos in scripts/samples/ named <plant-name>-<n>.jpg (should match) or
+//   not-<plant-name>-<n>.jpg (is something else, photographed while claiming that plant), e.g.
+//   neem-1.jpg, not-neem-1.jpg, golden-shower-tree-1.jpg. Then: npm run smoke
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { defaultCardId, getCard } from "../lib/huntCards";
 import { verifyPlant } from "../lib/model";
 
 async function main() {
@@ -11,28 +11,26 @@ async function main() {
     process.loadEnvFile(".env.local");
   } catch {}
   const dir = join(__dirname, "samples");
-  const files = readdirSync(dir).filter((f) => /\.(jpe?g)$/i.test(f)).sort();
+  const files = readdirSync(dir).filter((f) => /\.jpe?g$/i.test(f)).sort();
   if (!files.length) return console.log("No photos in scripts/samples/. Add e.g. neem-1.jpg and not-neem-1.jpg.");
 
-  const plants = getCard(defaultCardId)!.plants;
   const rows: string[] = [];
   const latencies: number[] = [];
   let right = 0;
 
   for (const file of files) {
     const m = file.match(/^(not-)?(.+)-\d+\.jpe?g$/i);
-    const plant = plants.find((p) => p.id === m?.[2]);
-    if (!m || !plant) {
+    if (!m) {
       console.log(`skip ${file}: name must look like neem-1.jpg or not-neem-1.jpg`);
       continue;
     }
     const expectMatch = !m[1];
+    const name = m[2].replace(/-/g, " ");
     const imageDataUrl = `data:image/jpeg;base64,${readFileSync(join(dir, file)).toString("base64")}`;
     const t0 = Date.now();
     let verdict = "error", confidence = 0, reason = "";
     try {
-      const r = await verifyPlant({ imageDataUrl, plant });
-      ({ verdict, confidence, reason } = r);
+      ({ verdict, confidence, reason } = await verifyPlant({ imageDataUrl, plant: { name, scientific: "", traits: "", lookalikes: "" } }));
     } catch (e) {
       reason = (e as Error).message;
     }
@@ -40,7 +38,7 @@ async function main() {
     const ok = expectMatch ? verdict === "match" : verdict !== "match"; // a miss must never become a match
     if (ok) right++;
     latencies.push(ms);
-    rows.push(`| ${file} | ${expectMatch ? "match" : "not " + plant.id} | ${verdict} | ${confidence.toFixed(2)} | ${ms} ms | ${ok ? "yes" : "NO"} | ${reason.replace(/\|/g, "/")} |`);
+    rows.push(`| ${file} | ${expectMatch ? "match" : "not " + name} | ${verdict} | ${confidence.toFixed(2)} | ${ms} ms | ${ok ? "yes" : "NO"} | ${reason.replace(/\|/g, "/")} |`);
   }
 
   latencies.sort((a, b) => a - b);

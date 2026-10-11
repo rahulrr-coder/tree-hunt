@@ -1,9 +1,10 @@
 "use client";
-import { Camera, Check, Flame, RotateCcw, X } from "lucide-react";
+import { Camera, Check, ExternalLink, Flame, RotateCcw, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { api, type VerifyResponse } from "@/lib/api";
-import type { Plant } from "@/lib/huntCards";
+import type { Plant } from "@/lib/hunt";
 import { getLocation, processPhoto } from "@/lib/photo";
+import { browserTz } from "@/lib/api";
 
 type Stage =
   | { name: "detail" }
@@ -11,7 +12,7 @@ type Stage =
   | { name: "result"; photo: string; res: VerifyResponse }
   | { name: "error"; photo: string; message: string };
 
-type Props = { plant: Plant; userId: string; model: string | null; found: boolean; onClose: () => void; onVerified: () => void };
+type Props = { plant: Plant; cardId: string; userId: string; model: string | null; found: boolean; onClose: () => void; onVerified: () => void };
 
 const sleep = (ms: number) => new Promise<null>((r) => setTimeout(() => r(null), ms));
 
@@ -32,7 +33,7 @@ function Stamp() {
   );
 }
 
-export function PlantSheet({ plant, userId, model, found, onClose, onVerified }: Props) {
+export function PlantSheet({ plant, cardId, userId, model, found, onClose, onVerified }: Props) {
   const [stage, setStage] = useState<Stage>({ name: "detail" });
   const [noLocation, setNoLocation] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -55,7 +56,7 @@ export function PlantSheet({ plant, userId, model, found, onClose, onVerified }:
       const pos = await Promise.race([location.current, sleep(4000)]);
       if (!pos && firstTime("treehunt:no-location-told")) setNoLocation(true);
       const res = await api<VerifyResponse>("/api/verify", {
-        userId, plantId: plant.id, image: out.image, thumb: out.thumb, lat: pos?.lat, lng: pos?.lng,
+        userId, cardId, plantId: plant.id, tz: browserTz(), image: out.image, thumb: out.thumb, lat: pos?.lat, lng: pos?.lng,
       });
       if (res.verdict === "match") {
         navigator.vibrate?.(30);
@@ -77,12 +78,11 @@ export function PlantSheet({ plant, userId, model, found, onClose, onVerified }:
         aria-modal="true"
         aria-label={plant.name}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[92dvh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border-t border-line bg-card p-5 pb-8"
+        className="max-h-[92dvh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border-t border-line bg-card p-5 pb-20"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="font-serif text-3xl font-semibold">{plant.name}</h2>
-            <p className="text-muted">{plant.tamil}</p>
+            <h2 className="font-serif text-3xl font-semibold capitalize">{plant.name}</h2>
             <p className="font-serif italic text-muted">{plant.scientific}</p>
           </div>
           <button onClick={onClose} aria-label="Close" className="grid size-11 shrink-0 place-items-center rounded-full border border-line">
@@ -105,8 +105,18 @@ export function PlantSheet({ plant, userId, model, found, onClose, onVerified }:
 
         {stage.name === "detail" && (
           <>
+            <figure className="mt-4 overflow-hidden rounded-2xl border border-line">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={plant.photo.url} alt={`Sample photo of ${plant.name}`} className="aspect-[4/3] w-full object-cover" />
+              <figcaption className="flex items-center justify-between gap-2 bg-paper px-3 py-1.5 text-[11px] leading-tight text-muted">
+                <span className="truncate">{plant.photo.credit}</span>
+                <a href={plant.taxonUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-0.5 font-medium text-leaf">
+                  iNaturalist <ExternalLink size={11} aria-hidden />
+                </a>
+              </figcaption>
+            </figure>
             <p className="mt-5 text-xl leading-snug">{plant.clue}</p>
-            <p className="mt-3 text-sm text-muted">Don&rsquo;t confuse with: {plant.lookalikes}</p>
+            {plant.lookalikes && <p className="mt-3 text-sm text-muted">Don&rsquo;t confuse with: {plant.lookalikes}</p>}
             {found && (
               <p className="mt-3 flex items-center gap-1.5 text-sm font-medium text-leaf">
                 <Check size={16} /> You&rsquo;ve found this one. Another snap still keeps your streak going.

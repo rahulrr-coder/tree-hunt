@@ -27,11 +27,11 @@ const Reply = z.object({
 const MIN_MATCH_CONFIDENCE = 0.6;
 const GENERIC_HINT = "Get closer, keep the leaves or flowers in focus, and shoot in good light.";
 
-export function buildPrompt(p: PlantInfo): string {
-  return `You are a careful field botanist checking a photo for a nature scavenger hunt in South India.
-The player claims this photo shows: ${p.name} (${p.scientific}).
-Identifying traits: ${p.traits}
-Common lookalikes: ${p.lookalikes}
+export function buildPrompt(p: PlantInfo, place = ""): string {
+  return `You are a careful field botanist checking a photo for a nature scavenger hunt${place ? ` near ${place}` : ""}.
+The player claims this photo shows: ${p.name}${p.scientific ? ` (${p.scientific})` : ""}.
+Identifying traits: ${p.traits || "use your own botanical knowledge of this plant"}
+Common lookalikes: ${p.lookalikes || "none listed"}
 
 Look only at what is visible. Decide:
 - "match": the claimed plant is clearly visible and its key traits are consistent.
@@ -68,7 +68,8 @@ export function parseReply(raw: string): VerifyResult | null {
 // first 400 and stop sending it, so "any model" really means any model.
 let sendTemperature = true;
 
-async function complete(prompt: string, imageDataUrl: string): Promise<string> {
+/** One chat completion. Text-only when `imageDataUrl` is omitted. Returns the raw reply text. */
+export async function ask(prompt: string, imageDataUrl?: string, timeoutMs = 25_000): Promise<string> {
   const { MODEL_API_KEY, MODEL_BASE_URL, MODEL_NAME } = process.env;
   if (!MODEL_API_KEY || !MODEL_BASE_URL || !MODEL_NAME) {
     throw new ModelError("MODEL_API_KEY, MODEL_BASE_URL and MODEL_NAME must be set.");
@@ -81,10 +82,15 @@ async function complete(prompt: string, imageDataUrl: string): Promise<string> {
         model: MODEL_NAME,
         ...(sendTemperature && { temperature: 0.2 }),
         messages: [
-          { role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: imageDataUrl } }] },
+          {
+            role: "user",
+            content: imageDataUrl
+              ? [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: imageDataUrl } }]
+              : prompt,
+          },
         ],
       }),
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   let res: Response;
   try {
@@ -107,12 +113,12 @@ async function complete(prompt: string, imageDataUrl: string): Promise<string> {
   return "";
 }
 
-export async function verifyPlant(input: { imageDataUrl: string; plant: PlantInfo }): Promise<VerifyResult> {
-  const prompt = buildPrompt(input.plant);
+export async function verifyPlant(input: { imageDataUrl: string; plant: PlantInfo; place?: string }): Promise<VerifyResult> {
+  const prompt = buildPrompt(input.plant, input.place);
   let lastError: ModelError | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const reply = parseReply(await complete(prompt, input.imageDataUrl));
+      const reply = parseReply(await ask(prompt, input.imageDataUrl));
       if (reply) return reply;
       lastError = null; // unreadable answer: retry once, then fall through to "unsure"
     } catch (e) {

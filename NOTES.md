@@ -3,7 +3,7 @@
 ## Smoke test (Phase 0)
 
 Not run yet. It needs a real `MODEL_API_KEY` and 5 to 8 photos in `scripts/samples/`
-(`neem-1.jpg` should match, `not-neem-1.jpg` is something else photographed while claiming neem).
+(`neem-1.jpg` should match, `not-neem-1.jpg` is something else photographed while claiming neem; the file name is the plant name the verifier is told).
 
 ```bash
 npm run smoke
@@ -16,7 +16,7 @@ about toothed versus smooth edges) and a blurry photo (should be `unsure`, not `
 |---|---|---|---|---|---|
 | _run `npm run smoke`_ | | | | | |
 
-If accuracy is poor: tighten `traits` in `data/hunt-cards/coimbatore.json` first, then the prompt in `lib/model.ts`.
+If accuracy is poor: tighten the prompt in `lib/model.ts`, or the card-writing prompt in `lib/hunt.ts` (`buildSelectionPrompt`), since generated traits feed the verifier.
 
 ## Decisions
 
@@ -28,7 +28,8 @@ If accuracy is poor: tighten `traits` in `data/hunt-cards/coimbatore.json` first
 - **String UUID ids**, not ObjectId, so nothing needs converting at the API boundary.
 - **Leaderboard ranks by unique plants** first; repeat finds still count for streaks and totals.
 - **In-memory store** when `MONGODB_URI` is unset (dev and tests only; production refuses to start without Mongo).
-- **Not built, by request of the spec**: accounts, city picker, comments, push, offline, native app.
+- **Hunt cards are generated** from iNaturalist sightings per ~28 km cell (see PLAN.md 1b); the curated Coimbatore card was removed.
+- **Not built, by request of the spec**: accounts, comments, likes, push, offline, native app.
 
 ## Known limitations
 

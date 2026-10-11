@@ -2,13 +2,12 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { defaultCardId, getCard } from "@/lib/huntCards";
+import { useUser } from "./UserProvider";
 
-type Pin = { id: string; nickname: string; plantId: string; lat: number; lng: number; createdAt: string };
+type Pin = { id: string; nickname: string; plantId: string; plantName: string; lat: number; lng: number; createdAt: string };
 
-const card = getCard(defaultCardId)!;
 const COLORS = ["#2f6b3a", "#b5532e", "#3d6fb5", "#8a5a9e", "#c28a12", "#1f8a8a", "#a63d5a", "#5b6659"];
-const COIMBATORE: [number, number] = [11.0168, 76.9558];
+const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 function ago(iso: string): string {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -20,14 +19,13 @@ function ago(iso: string): string {
 
 // Popup is built from DOM nodes + textContent so nicknames can never inject markup.
 function popup(pin: Pin): HTMLElement {
-  const plant = card.plants.find((p) => p.id === pin.plantId);
   const el = document.createElement("div");
   const img = document.createElement("img");
   img.src = `/api/finds/${pin.id}/thumb`;
-  img.alt = plant?.name ?? "Find";
+  img.alt = pin.plantName;
   img.style.cssText = "width:160px;height:120px;object-fit:cover;border-radius:12px;display:block";
   const name = document.createElement("strong");
-  name.textContent = plant?.name ?? pin.plantId;
+  name.textContent = pin.plantName;
   const who = document.createElement("div");
   who.textContent = `${pin.nickname} · ${ago(pin.createdAt)}`;
   el.append(img, name, who);
@@ -35,17 +33,19 @@ function popup(pin: Pin): HTMLElement {
 }
 
 export function MapView() {
+  const { place, ready } = useUser();
   const box = useRef<HTMLDivElement>(null);
   const [note, setNote] = useState("");
 
   useEffect(() => {
+    if (!ready) return; // wait for the saved place so the map opens on the right town
     let map: import("leaflet").Map | undefined;
     let cancelled = false;
     (async () => {
       const mod = await import("leaflet");
       const L = (mod.default ?? mod) as typeof mod;
       if (cancelled || !box.current) return;
-      map = L.map(box.current).setView(COIMBATORE, 13);
+      map = L.map(box.current).setView(place ? [place.lat, place.lng] : [20, 0], place ? 12 : 2);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap contributors",
@@ -55,7 +55,7 @@ export function MapView() {
         if (cancelled) return;
         if (!finds.length) setNote("No finds yet. Be the first.");
         for (const f of finds) {
-          const color = COLORS[Math.max(0, card.plants.findIndex((p) => p.id === f.plantId)) % COLORS.length];
+          const color = COLORS[hash(f.plantId) % COLORS.length];
           const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${color}"></div>`, iconSize: [18, 18] });
           L.marker([f.lat, f.lng], { icon }).addTo(map).bindPopup(() => popup(f));
         }
@@ -67,7 +67,7 @@ export function MapView() {
       cancelled = true;
       map?.remove();
     };
-  }, []);
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="relative">
