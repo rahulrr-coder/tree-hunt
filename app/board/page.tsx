@@ -16,7 +16,7 @@ export default function Board() {
   }, []);
 
   return (
-    <div className="px-4 pt-5">
+    <div className="px-4 pb-10 pt-5">
       <h1 className="font-serif text-2xl font-semibold">Leaderboard</h1>
       <p className="text-sm text-muted">Ranked by different plants found, then total finds.</p>
 

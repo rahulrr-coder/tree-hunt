@@ -49,7 +49,7 @@ export function Hunt() {
   const done = card.plants.filter((p) => state.found[p.id]).length;
 
   return (
-    <div className="px-4 pt-5">
+    <div className="px-4 pb-10 pt-5">
       <header className="flex items-center gap-4">
         <Ring done={done} total={card.plants.length} />
         <div className="min-w-0 flex-1">

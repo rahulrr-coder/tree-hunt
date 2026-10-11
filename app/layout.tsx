@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
-import { BottomNav } from "@/components/BottomNav";
+import { Nav } from "@/components/Nav";
 import { UserProvider } from "@/components/UserProvider";
 import "./globals.css";
 
@@ -18,8 +18,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
       <body className="font-sans antialiased">
         <UserProvider>
-          <main className="mx-auto min-h-dvh w-full max-w-[430px] pb-16 md:border-x md:border-line">{children}</main>
-          <BottomNav />
+          <Nav />
+          <main className="mx-auto min-h-dvh w-full max-w-[430px] md:border-x md:border-line">{children}</main>
         </UserProvider>
       </body>
     </html>

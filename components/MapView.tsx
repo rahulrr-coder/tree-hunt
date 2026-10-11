@@ -36,7 +36,7 @@ function popup(pin: Pin): HTMLElement {
 
 export function MapView() {
   const box = useRef<HTMLDivElement>(null);
-  const [count, setCount] = useState<number | null>(null);
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     let map: import("leaflet").Map | undefined;
@@ -53,14 +53,14 @@ export function MapView() {
       try {
         const { finds } = await api<{ finds: Pin[] }>("/api/finds?limit=200");
         if (cancelled) return;
-        setCount(finds.length);
+        if (!finds.length) setNote("No finds yet. Be the first.");
         for (const f of finds) {
           const color = COLORS[Math.max(0, card.plants.findIndex((p) => p.id === f.plantId)) % COLORS.length];
           const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${color}"></div>`, iconSize: [18, 18] });
           L.marker([f.lat, f.lng], { icon }).addTo(map).bindPopup(() => popup(f));
         }
-      } catch {
-        setCount(0);
+      } catch (e) {
+        if (!cancelled) setNote((e as Error).message);
       }
     })();
     return () => {
@@ -71,10 +71,10 @@ export function MapView() {
 
   return (
     <div className="relative">
-      <div ref={box} className="h-[calc(100dvh-4rem)] w-full" role="application" aria-label="Map of verified finds" />
-      {count === 0 && (
-        <p className="absolute inset-x-6 top-6 z-[1000] rounded-2xl border border-line bg-card px-4 py-3 text-center font-medium shadow-sm">
-          No finds yet. Be the first.
+      <div ref={box} className="h-[calc(100dvh-3.5rem)] w-full" role="application" aria-label="Map of verified finds" />
+      {note && (
+        <p role="status" className="absolute left-16 right-4 top-4 z-[1000] rounded-2xl border border-line bg-card px-4 py-3 text-center font-medium shadow-sm">
+          {note}
         </p>
       )}
     </div>

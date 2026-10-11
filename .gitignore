@@ -6,3 +6,6 @@ scripts/samples/*
 !scripts/samples/.gitkeep
 *.tsbuildinfo
 next-env.d.ts
+
+# Local Netlify folder
+.netlify
