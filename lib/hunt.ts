@@ -152,14 +152,46 @@ const COUNTRIES: Record<string, Lang[]> = {
   Philippines: [L("tagalog", "tl", "Tagalog")], Malaysia: [L("malay", "ms", "Malay")],
 };
 
-/** Local languages for a place, from its country and state. Empty means English only. */
-export function languagesFor(country?: string, region?: string): Lang[] {
+const ENGLISH = ["United States", "United Kingdom", "Australia", "New Zealand", "Ireland"];
+
+/** Local languages for a place from the table: [] = English only, undefined = not in the table (ask the model). */
+export function languagesFor(country?: string, region?: string): Lang[] | undefined {
   if (country === "India") {
     if (region && INDIA[region]) return INDIA[region];
-    if (region && INDIA_HINDI_BELT.includes(region)) return [HINDI];
-    return [HINDI];
+    return region && INDIA_HINDI_BELT.includes(region) ? [HINDI] : undefined;
   }
-  return (country && COUNTRIES[country]) || [];
+  if (country && ENGLISH.includes(country)) return [];
+  return country ? COUNTRIES[country] : [];
+}
+
+const AskedLangs = z.array(z.object({
+  language: z.string().trim().regex(/^[\p{L} -]{2,30}$/u),
+  code: z.string().trim().toLowerCase().regex(/^[a-z]{2,3}$/),
+})).max(2);
+
+/** Table first (free, instant). For places it does not cover, the model names the everyday plant-name languages. */
+async function resolveLanguages(info: PlaceInfo): Promise<Lang[]> {
+  const known = languagesFor(info.country, info.region);
+  if (known) return known;
+  try {
+    const where = [info.name, info.region, info.country].filter((v, i, a) => v && v !== "Your area" && a.indexOf(v) === i).join(", ");
+    const raw = await ask(
+      `Which language(s) do people near ${where} mainly use for everyday names of plants and trees? ` +
+        `Give the predominant local language first and at most two in total. Leave English out unless it is the only everyday language there.\n` +
+        `Reply with ONLY a JSON array, no markdown: [{"language":"Tamil","code":"ta"}]  (use [] for English only)`,
+      undefined,
+      15_000,
+    );
+    const body = raw.replace(/```(?:json)?/gi, "").match(/\[[\s\S]*\]/)?.[0];
+    const parsed = AskedLangs.safeParse(body ? JSON.parse(body) : []);
+    if (!parsed.success) return [];
+    return parsed.data
+      .filter((l) => l.language.toLowerCase() !== "english")
+      .map((l) => ({ lexicon: l.language.toLowerCase().replace(/\s+/g, "-"), code: l.code, label: l.language }));
+  } catch (e) {
+    console.error("[hunt] language lookup failed, using English only:", (e as Error).message);
+    return [];
+  }
 }
 
 type PlaceInfo = { name: string; region?: string; country?: string };
@@ -331,7 +363,7 @@ async function choose(place: string, window: Candidate[], first: boolean, langs:
 export async function generateCard(lat: number, lng: number): Promise<HuntCard> {
   const cell = cellFor(lat, lng);
   const [candidates, info] = await Promise.all([candidatesFor(cell), placeInfoFor(cell)]);
-  const languages = languagesFor(info.country, info.region);
+  const languages = await resolveLanguages(info);
   const place = info.name;
 
   // The first card is built from the 30 most-sighted plants: "the most common ones".
@@ -357,7 +389,7 @@ export async function extendCard(card: HuntCard): Promise<HuntCard> {
   }
   if (!pool.length || card.plants.length >= MAX_PLANTS) return { ...card, pool: [], rev: card.rev + 1 };
 
-  const languages = card.languages ?? languagesFor(...regionOf(await placeInfoFor(cellFor(card.lat, card.lng))));
+  const languages = card.languages ?? (await resolveLanguages(await placeInfoFor(cellFor(card.lat, card.lng))));
   const window = pool.slice(0, TAXA_PER_CALL);
   const names = inatLocalNames(window.map((c) => c.id), languages);
   const picks = await choose(card.place, window, false, languages);
@@ -403,8 +435,6 @@ export function customId(name: string): string {
   return `custom-${slug || "plant"}`;
 }
 
-const regionOf = (i: PlaceInfo): [string | undefined, string | undefined] => [i.country, i.region];
-
 function suggestionsOf(picks: z.infer<typeof Pick>): Map<string, Record<string, string>> {
   const m = new Map<string, Record<string, string>>();
   for (const p of picks) {
@@ -418,7 +448,7 @@ function suggestionsOf(picks: z.infer<typeof Pick>): Map<string, Record<string, 
 
 /** One-off upgrade for cards saved before local names existed: iNaturalist names only (no model call). */
 export async function localizeCard(card: HuntCard): Promise<HuntCard> {
-  const languages = languagesFor(...regionOf(await placeInfoFor(cellFor(card.lat, card.lng))));
+  const languages = await resolveLanguages(await placeInfoFor(cellFor(card.lat, card.lng)));
   const plants = await addLocalNames(card.plants, languages);
   return { ...card, languages, plants, rev: card.rev + 1 };
 }

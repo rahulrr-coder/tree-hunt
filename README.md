@@ -54,9 +54,10 @@ player's place --> cell (~28 km)  --cache miss-->  iNaturalist: most-sighted pla
 - **Add a plant that isn't on the list:** type its name, snap it, and the checker confirms the photo matches the name.
   It is saved under "Plants you added" and counts toward your streak. Because there are no traits to check against, up
   to 5 of these count on the leaderboard, so it can't be farmed.
-- **Local names:** the area's language(s) are picked from its state or country (Tamil Nadu: Tamil; Maharashtra: Marathi
-  and Hindi). iNaturalist's own names are used where it has them; otherwise the model suggests one and it is labelled as
-  an AI suggestion.
+- **Local names:** the area's language(s) come from a small built-in table of states and countries (Tamil Nadu: Tamil;
+  Maharashtra: Marathi and Hindi). For any place the table does not cover, the model names the predominant local
+  language instead, so every region works. iNaturalist's own plant names are used where it has them; otherwise the
+  model suggests one and it is labelled as an AI suggestion.
 
 ## Install it like an app
 

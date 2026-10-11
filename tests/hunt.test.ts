@@ -74,11 +74,13 @@ describe("categories and show-more helpers", () => {
 
 describe("languagesFor", () => {
   it("uses the state in India and the country elsewhere", () => {
-    expect(languagesFor("India", "Tamil Nadu").map((l) => l.code)).toEqual(["ta"]);
-    expect(languagesFor("India", "Maharashtra").map((l) => l.code)).toEqual(["mr", "hi"]);
-    expect(languagesFor("India", "Delhi").map((l) => l.code)).toEqual(["hi"]);
-    expect(languagesFor("Japan").map((l) => l.code)).toEqual(["ja"]);
-    expect(languagesFor("Canada")).toEqual([]);
+    expect(languagesFor("India", "Tamil Nadu")!.map((l) => l.code)).toEqual(["ta"]);
+    expect(languagesFor("India", "Maharashtra")!.map((l) => l.code)).toEqual(["mr", "hi"]);
+    expect(languagesFor("India", "Delhi")!.map((l) => l.code)).toEqual(["hi"]);
+    expect(languagesFor("Japan")!.map((l) => l.code)).toEqual(["ja"]);
+    expect(languagesFor("Australia")).toEqual([]);
+    expect(languagesFor("Canada")).toBeUndefined(); // not in the table: the model decides
+    expect(languagesFor("India", "Sikkim")).toBeUndefined();
   });
 });
 
@@ -123,6 +125,21 @@ describe("generateCard", () => {
     expect(card.id).toMatch(CELL_ID);
     expect(card.pool?.length).toBe(4); // 12 candidates, 8 shown
     expect(card.rev).toBe(0);
+  });
+
+  it("asks the model for the language when the place is not in the table, and uses it for names", async () => {
+    const base = mockFetch(() => ({}));
+    const picks = candidates.slice(0, 8).map((c) => ({ id: c.id, difficulty: "easy", clue: `Find ${c.name}`, traits: "t", lookalikes: "", local: { Swahili: "mti" } }));
+    const reply = (c: unknown) => json({ choices: [{ message: { content: JSON.stringify(c) } }] });
+    vi.stubGlobal("fetch", async (input: string | URL, init?: { body?: string }) => {
+      const url = String(input);
+      if (url.includes("places/nearby")) return json({ results: { standard: [{ name: "Kenya", admin_level: 0 }, { name: "Nairobi", admin_level: 10 }, { name: "Westlands", admin_level: 20 }] } });
+      if (url.includes("chat/completions")) return reply(String(init?.body).includes("everyday names of plants") ? [{ language: "Swahili", code: "sw" }] : picks);
+      return base(input);
+    });
+    const card = await generateCard(-1.26, 36.8);
+    expect(card.languages).toEqual([{ lexicon: "swahili", code: "sw", label: "Swahili" }]);
+    expect(card.plants[0].local).toEqual([{ code: "sw", label: "Swahili", name: "mti", ai: true }]);
   });
 
   it("falls back to sightings-only text when the model fails", async () => {
