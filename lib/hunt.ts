@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { HttpError } from "./http";
+import { cellFor } from "./cell";
 import { ask } from "./model";
+
+export { CELL_ID, cellFor } from "./cell";
 
 // Hunt cards are built on demand for a ~28 km cell of the map and cached (see db.ts).
 // Real sightings (iNaturalist) decide WHICH plants; the model only chooses among them and
@@ -31,22 +34,11 @@ export type HuntCard = {
 };
 
 export const HUNT_SIZE = 8;
-const CELL_DEGREES = 0.25;
 const RADIUS_KM = 20;
 const CANDIDATES = 30; // the iNaturalist taxa endpoint accepts at most 30 ids
 const UA = "TreeHunt/0.1 (+https://github.com/rahulrr-coder/tree-hunt)";
 // Reusable licences, best first. "No derivatives" and all-rights-reserved photos are skipped.
 const LICENSES = ["cc0", "cc-by", "cc-by-sa", "cc-by-nc", "cc-by-nc-sa"];
-
-export const CELL_ID = /^\d+_\d+$/;
-
-/** Snap a point to its cell, so everyone in the same area shares one hunt card. */
-export function cellFor(lat: number, lng: number): { id: string; lat: number; lng: number } {
-  const i = Math.floor((lat + 90) / CELL_DEGREES);
-  const j = Math.floor((lng + 180) / CELL_DEGREES);
-  const centre = (k: number, origin: number) => Math.round((origin + (k + 0.5) * CELL_DEGREES) * 1e4) / 1e4;
-  return { id: `${i}_${j}`, lat: centre(i, -90), lng: centre(j, -180) };
-}
 
 async function inat<T>(path: string, params: Record<string, string | number>): Promise<T> {
   const url = new URL(`https://api.inaturalist.org${path}`);

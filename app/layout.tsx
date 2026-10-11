@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans antialiased">
         <UserProvider>
           <Nav />
-          <main className="mx-auto min-h-dvh w-full max-w-[430px] md:border-x md:border-line">{children}</main>
+          <main className="mx-auto min-h-[calc(100dvh-3.5rem)] w-full max-w-[430px] md:border-x md:border-line">{children}</main>
         </UserProvider>
       </body>
     </html>

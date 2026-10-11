@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CELL_ID } from "./hunt";
+import { CELL_ID } from "./cell";
 import { round3 } from "./photo";
 import { isTz } from "./streak";
 
