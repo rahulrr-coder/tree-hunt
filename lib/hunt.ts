@@ -52,7 +52,7 @@ export const MAX_PLANTS = 56;
 const RADIUS_KM = 20;
 const TAXA_PER_CALL = 30; // the iNaturalist taxa endpoint accepts at most 30 ids
 const CANDIDATES = 60;
-const UA = "TreeHunt/0.1 (+https://github.com/rahulrr-coder/tree-hunt)";
+export const UA = "TreeHunt/0.1 (+https://github.com/rahulrr-coder/tree-hunt)";
 // Reusable licences, best first. "No derivatives" and all-rights-reserved photos are skipped.
 const LICENSES = ["cc0", "cc-by", "cc-by-sa", "cc-by-nc", "cc-by-nc-sa"];
 
@@ -72,7 +72,7 @@ async function inat<T>(path: string, params: Record<string, string | number>): P
 const plain = (html: string) => html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 const firstSentence = (s: string) => s.match(/^.*?[.!?](\s|$)/)?.[0].trim() ?? s;
 
-function bestPhoto(photos: { photo: { medium_url?: string; license_code?: string | null; attribution?: string } }[]): Photo | null {
+export function bestPhoto(photos: { photo: { medium_url?: string; license_code?: string | null; attribution?: string } }[]): Photo | null {
   const ranked = photos
     .map((p) => p.photo)
     .filter((p) => p.medium_url && p.license_code && LICENSES.includes(p.license_code))
