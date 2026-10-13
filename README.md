@@ -57,6 +57,11 @@ player's place --> cell (~28 km)  --cache miss-->  iNaturalist: most-sighted pla
 - **Add a plant that isn't on the list:** type its name, snap it, and the checker confirms the photo matches the name.
   It is saved under "Plants you added" and counts toward your streak. Because there are no traits to check against, up
   to 5 of these count on the leaderboard, so it can't be farmed.
+- **What's this plant? (identify from a photo):** snap or pick a photo without naming anything, and the checker lists up
+  to 5 plants it can see, trees first, each with how sure it is and the features it went by. Names are looked up on
+  iNaturalist for a licensed reference photo and a link, and plants already on your card are marked with their number.
+  "Add to my finds" then sends the same photo through the normal check under that name, so it counts exactly like a
+  card plant or a plant you added by name. Identifying shares the 20-photos-per-hour allowance with photo checks.
 - **Local names:** the area's language(s) come from a small built-in table of states and countries (Tamil Nadu: Tamil;
   Maharashtra: Marathi and Hindi). For any place the table does not cover, the model names the predominant local
   language instead, so every region works. iNaturalist's own plant names are used where it has them; otherwise the
@@ -74,7 +79,7 @@ Counters live in MongoDB (`rate_limits`, expiring), so they hold across serverle
 
 | What | Limit |
 |---|---|
-| Photo checks | 20 per player per hour (`VERIFY_RATE_LIMIT_PER_HOUR`), 60 per network per hour |
+| Photo checks and identifications | 20 per player per hour together (`VERIFY_RATE_LIMIT_PER_HOUR`), 60 each per network per hour |
 | New hunt areas / "show more" | 6 / 12 per player per hour |
 | Sign-ups | 10 per network per hour |
 | Place search, location lookup | 90 / 20 per network per minute |

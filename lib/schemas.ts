@@ -38,6 +38,13 @@ export const VerifyBody = z.object({
   lng: coord(180),
 }).refine((b) => b.plantId !== "custom" || Boolean(b.customName), { message: "Tell us what plant it is", path: ["customName"] });
 
+// "What plants are in this photo?" The card gives the checker a place, and links answers to plants on it.
+export const IdentifyBody = z.object({
+  userId: z.string().min(1).max(64),
+  cardId: z.string().regex(CELL_ID).optional(),
+  image: jpeg(2_800_000),
+});
+
 export const FindsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(200),
   kind: z.enum(["all", "tree", "shrub", "herb", "other"]).default("all"),

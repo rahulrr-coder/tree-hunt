@@ -147,3 +147,88 @@ export async function verifyPlant(input: { imageDataUrl: string; plant: PlantInf
   if (lastError) throw lastError;
   return { verdict: "unsure", confidence: 0, reason: "The checker's answer could not be read.", hint: GENERIC_HINT };
 }
+
+// ---- Identify: "what plants are in this photo?" (no name given) ----
+
+export type Identified = { name: string; scientific: string; kind: PlantKind; confidence: number; seen: string };
+export type IdentifyResult = { plants: Identified[]; note: string };
+
+const MAX_IDENTIFIED = 5;
+const MIN_IDENTIFY_CONFIDENCE = 0.25; // below this it is a guess, not an identification
+// The name goes back into a prompt if the player adds it as a find, so keep only the characters CustomName allows.
+const safeName = (s: string) => s.replace(/[^\p{L}\p{N} '’().,-]+/gu, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+const IdentifyReply = z.object({
+  plants: z
+    .array(
+      z.object({
+        name: text,
+        scientific: text,
+        kind: z.enum(["tree", "shrub", "herb", "climber", "other"]).catch("other"),
+        confidence: Reply.shape.confidence,
+        seen: text,
+      }),
+    )
+    .catch([]),
+  note: text,
+});
+
+export function buildIdentifyPrompt(place = ""): string {
+  return `You are a careful field botanist helping a player on a nature walk${place ? ` near ${place}` : ""}.
+They photographed some plants and want to know what they are. Trees matter most to them.
+
+Work from the photo only:
+1. Find each distinct plant that is clearly visible (at most ${MAX_IDENTIFIED}), trees first, then the largest or clearest.
+   Ignore tiny, far-off or blurred background plants you could only guess at. Phone photos are often dim or soft: judge what is visible.
+2. For each, note the diagnostic features you can actually see (leaf shape and arrangement, edges, flowers, fruit, bark, form),
+   then name the most likely species. Prefer species that grow${place ? ` around ${place}` : " in that kind of place"}.
+   If only the genus is clear, give the genus (e.g. "Ficus") and a lower confidence.
+
+"confidence" is how sure you are of each name, from 0 to 1. Be honest: a lookalike you cannot rule out means a lower number.
+
+Reply with ONLY this JSON, no markdown:
+{"plants":[{"name":"common English name","scientific":"Genus species","kind":"tree (palms too) | shrub (flowering bushes too) | herb (small plants, grasses) | climber (vines) | other","confidence":0.0-1.0,"seen":"the features that identify it, one short sentence"}],
+ "note":"if no plant could be identified: one short, specific tip for a better photo, else empty"}`;
+}
+
+/** Tolerates code fences and chatter. Drops guesses, duplicates and nameless entries; most confident first. Null when unreadable. */
+export function parseIdentifyReply(raw: string): IdentifyResult | null {
+  const body = raw.replace(/```(?:json)?/gi, "").match(/\{[\s\S]*\}/)?.[0];
+  if (!body) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  const r = IdentifyReply.safeParse(obj);
+  if (!r.success) return null;
+  const seen = new Set<string>();
+  const plants: Identified[] = [];
+  for (const p of [...r.data.plants].sort((a, b) => b.confidence - a.confidence)) {
+    const name = safeName(p.name) || safeName(p.scientific);
+    const scientific = safeName(p.scientific);
+    const key = (scientific || name).toLowerCase();
+    if (name.length < 2 || p.confidence < MIN_IDENTIFY_CONFIDENCE || seen.has(key)) continue;
+    seen.add(key);
+    plants.push({ name, scientific, kind: p.kind, confidence: p.confidence, seen: p.seen.slice(0, 200) });
+    if (plants.length === MAX_IDENTIFIED) break;
+  }
+  return { plants, note: plants.length ? "" : r.data.note.slice(0, 200) || GENERIC_HINT };
+}
+
+export async function identifyPlants(input: { imageDataUrl: string; place?: string }): Promise<IdentifyResult> {
+  const prompt = buildIdentifyPrompt(input.place);
+  let lastError: ModelError | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const reply = parseIdentifyReply(await ask(prompt, input.imageDataUrl));
+      if (reply) return reply;
+      lastError = null; // unreadable answer: retry once, then fall through to "nothing identified"
+    } catch (e) {
+      if (!(e instanceof ModelError) || !e.retryable) throw e;
+      lastError = e;
+    }
+  }
+  if (lastError) throw lastError;
+  return { plants: [], note: GENERIC_HINT };
+}

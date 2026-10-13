@@ -7,6 +7,8 @@ export type VerifyResponse = {
   streak?: { current: number; longest: number; increased: boolean };
 };
 
+export type IdentifyResponse = { plants: import("./identify").IdentifiedPlant[]; note: string };
+
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
     super(message);

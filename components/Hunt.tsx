@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, browserTz, type HuntState, type Place } from "@/lib/api";
 import { groupOf, KIND_FILTERS } from "@/lib/categories";
 import type { Plant } from "@/lib/hunt";
+import { IdentifySheet } from "./IdentifySheet";
 import { InstallHint } from "./InstallHint";
 import { PlaceChooser, Spinner } from "./PlaceChooser";
 import { PlantSheet } from "./PlantSheet";
@@ -45,6 +46,7 @@ export function Hunt() {
   const [error, setError] = useState("");
   const [open, setOpen] = useState<{ plant: Plant | "custom"; snap?: boolean } | null>(null);
   const [changing, setChanging] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
   const [filter, setFilter] = useState<FilterId>("common");
   const [more, setMore] = useState(false);
 
@@ -151,6 +153,17 @@ export function Hunt() {
       </header>
 
       {error && <p role="alert" className="mt-4 rounded-2xl border border-clay/40 bg-clay/10 px-4 py-3 text-clay">{error}</p>}
+
+      <button
+        onClick={() => setIdentifying(true)}
+        className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-leaf bg-card p-3 text-left active:bg-paper"
+      >
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-leaf font-serif text-2xl font-black text-white" aria-hidden>?</span>
+        <span className="min-w-0">
+          <span className="block font-semibold">What&rsquo;s this plant?</span>
+          <span className="block text-sm text-muted">Snap any tree or plant and we&rsquo;ll name it, even if it isn&rsquo;t on your card.</span>
+        </span>
+      </button>
 
       <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1" role="tablist" aria-label="Plant categories">
         {FILTERS.filter((f) => ["common", "all", "found"].includes(f.id) || counts[f.id].total > 0).map((f) => {
@@ -291,6 +304,16 @@ export function Hunt() {
           userId={user.userId}
           found={open.plant !== "custom" && Boolean(state.found[open.plant.id])}
           onClose={() => setOpen(null)}
+          onVerified={load}
+        />
+      )}
+      {identifying && user && (
+        <IdentifySheet
+          cardId={card.id}
+          userId={user.userId}
+          plants={card.plants}
+          found={state.found}
+          onClose={() => setIdentifying(false)}
           onVerified={load}
         />
       )}
